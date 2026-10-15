@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.data
 
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteException
 import android.util.Log
@@ -18,14 +19,6 @@ import kotlinx.coroutines.withContext
 
 /** A database as shown in the chooser. [id] is the file's base name and never changes. */
 data class DatabaseSummary(val id: String, val name: String, val recordCount: Long, val fieldCount: Long)
-
-data class FieldDef(
-    val id: Long,
-    val position: Int,
-    val name: String,
-    val type: FieldType,
-    val props: FieldProps = FieldProps.default(type)
-)
 
 /**
  * All AnDB databases, one SQLite file each in [dir]. The chooser list is whatever files are in the
@@ -88,7 +81,7 @@ class DatabaseRepository(
                     arrayOf(position, name, type.code, FieldProps.encode(props))
                 )
                 val field = FieldDef(longQuery("SELECT last_insert_rowid()"), position, name, type, props)
-                addColumn(field)
+                addColumn(field, idGenerator)
                 field
             }
         }
@@ -97,7 +90,8 @@ class DatabaseRepository(
     /**
      * Changes a field's name, type and settings. When the storage class changes, values are
      * converted with SQL `CAST` (so text that isn't a number becomes 0), or dropped when the new
-     * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID.
+     * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID. A List
+     * switched to multiple choices keeps each value as a choice; switched back, it keeps the first.
      */
     suspend fun updateField(id: String, fieldId: Long, name: String, type: FieldType, props: FieldProps) = mutate {
         withDatabase(id) {
@@ -109,20 +103,10 @@ class DatabaseRepository(
                     "UPDATE andb_field SET name = ?, type = ?, props = ? WHERE id = ?",
                     arrayOf(name, type.code, FieldProps.encode(props), fieldId)
                 )
-                when {
-                    old.type.storage == type.storage -> Unit
-                    old.type.storage == Storage.NONE -> addColumn(new)
-                    else -> rebuildRecordTable(
-                        recordColumns(fields.map { if (it.id == fieldId) new else it }) { field, column ->
-                            when {
-                                field.id != fieldId -> column
-                                type == FieldType.ID -> "NULL"
-                                else -> "CAST($column AS ${type.storage.sqlType})"
-                            }
-                        }
-                    )
-                }
-                if (type == FieldType.ID) updateIds(old, new)
+                if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
+                if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
+                if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
+                if (type == FieldType.ID) updateIds(old, new, idGenerator)
                 if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(fieldId))
             }
         }
@@ -148,12 +132,41 @@ class DatabaseRepository(
                 val field = fields.first { it.id == fieldId }
                 execSQL("DELETE FROM andb_field WHERE id = ?", arrayOf(fieldId))
                 deleteMeta(DatabaseFile.nextIdKey(fieldId))
+                execSQL("DROP TABLE IF EXISTS ${DatabaseFile.listTable(fieldId)}")
                 val remaining = fields - field
                 writePositions(remaining.map { it.id })
-                if (field.type.storage != Storage.NONE) {
+                if (field.storage != Storage.NONE) {
                     rebuildRecordTable(recordColumns(remaining))
                 }
             }
+        }
+    }
+
+    /**
+     * The distinct values field [fieldId] currently holds across all records, sorted, as text (IDs
+     * formatted). This is what a List looking up that field offers. Empty if the field is gone.
+     */
+    suspend fun distinctValues(id: String, fieldId: Long): List<String> = withContext(ioDispatcher) {
+        withDatabase(id) {
+            val field = readFields().firstOrNull { it.id == fieldId }
+            val column = DatabaseFile.columnName(fieldId)
+            val sql = when {
+                field == null -> null
+                field.isMultiList -> "SELECT DISTINCT value FROM ${DatabaseFile.listTable(fieldId)}"
+                field.storage == Storage.NONE -> null
+                else -> "SELECT DISTINCT $column FROM record WHERE $column IS NOT NULL AND $column != ''"
+            }
+            val idProps = field?.props as? IdProps
+            sql?.let {
+                rawQuery(it, null).use { c ->
+                    buildList {
+                        while (c.moveToNext()) {
+                            val isNumber = c.getType(0) == Cursor.FIELD_TYPE_INTEGER
+                            add(if (idProps != null && isNumber) idProps.format(c.getLong(0)) else c.getString(0))
+                        }
+                    }
+                }
+            }.orEmpty().sortedWith(String.CASE_INSENSITIVE_ORDER)
         }
     }
 
@@ -173,37 +186,6 @@ class DatabaseRepository(
                 recordId
             }
         }
-    }
-
-    /** Adds the record column for a new or newly stored [field]. */
-    private fun SQLiteDatabase.addColumn(field: FieldDef) {
-        val sqlType = field.type.storage.sqlType ?: return
-        val column = DatabaseFile.columnName(field.id)
-        execSQL("ALTER TABLE record ADD COLUMN $column $sqlType")
-        if (field.type == FieldType.ID) {
-            createUniqueIndex(column)
-            backfillIds(field, idGenerator)
-        }
-    }
-
-    /**
-     * Brings ID field [new] up to date after an update from [old]. A field that just became an ID
-     * already has empty values (its column was added or rebuilt), so only a kind change clears them.
-     */
-    private fun SQLiteDatabase.updateIds(old: FieldDef, new: FieldDef) {
-        val props = new.props as IdProps
-        val oldProps = old.props as? IdProps
-        val column = DatabaseFile.columnName(new.id)
-        val key = DatabaseFile.nextIdKey(new.id)
-        if (oldProps != null && oldProps.kind != props.kind) {
-            execSQL("UPDATE record SET $column = NULL")
-            deleteMeta(key)
-        } else if (oldProps != null && props.start != oldProps.start) {
-            // Never move the counter back: numbers already handed out are not reused.
-            getMeta(key)?.toLong()?.let { next -> setMeta(key, maxOf(next, props.start).toString()) }
-        }
-        createUniqueIndex(column)
-        backfillIds(new, idGenerator)
     }
 
     private fun fileFor(id: String): File {

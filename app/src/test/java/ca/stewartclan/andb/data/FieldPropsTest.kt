@@ -38,4 +38,13 @@ class FieldPropsTest {
         assertEquals("12345", IdProps(padding = 3).format(12345))
         assertEquals("7", IdProps().format(7))
     }
+
+    @Test
+    fun listPropsRoundTrip() {
+        val fixed = ListProps(listOf("Fiction", "History"), multiple = true)
+        val lookup = ListProps(lookup = Lookup("db-id", 7))
+        assertEquals(fixed, FieldProps.decode(FieldType.LIST, FieldProps.encode(fixed)))
+        assertEquals(lookup, FieldProps.decode(FieldType.LIST, FieldProps.encode(lookup)))
+        assertEquals(ListProps(), FieldProps.decode(FieldType.LIST, "{}"))
+    }
 }

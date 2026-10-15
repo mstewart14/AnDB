@@ -22,12 +22,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-class DesignViewModel(private val repository: DatabaseRepository, private val databaseId: String) :
-    ReportingViewModel() {
+class DesignViewModel(private val repository: DatabaseRepository, val databaseId: String) : ReportingViewModel() {
 
     val database: StateFlow<DatabaseSummary?> = repository.databases
         .map { dbs -> dbs?.find { it.id == databaseId } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** All databases, for choosing a List's lookup source. */
+    val databases: StateFlow<List<DatabaseSummary>?> = repository.databases
+
+    private val _lookupInfo = MutableStateFlow(LookupInfo())
+
+    /** Fields of the lookup database being chosen, and values of the chosen field. */
+    val lookupInfo: StateFlow<LookupInfo> = _lookupInfo.asStateFlow()
 
     private val _fields = MutableStateFlow<List<FieldDef>?>(null)
 
@@ -58,6 +65,24 @@ class DesignViewModel(private val repository: DatabaseRepository, private val da
     fun moveField(field: FieldDef, by: Int) = change {
         val index = fields.value.orEmpty().indexOfFirst { it.id == field.id }
         repository.moveField(databaseId, field.id, index + by)
+    }
+
+    /** Moves [field] to position [index], as dropped by drag and drop. */
+    fun moveFieldTo(field: FieldDef, index: Int) = change {
+        repository.moveField(databaseId, field.id, index)
+    }
+
+    /** Loads what the List editor shows for a lookup of [fieldId] in [lookupDatabaseId]. */
+    fun loadLookup(lookupDatabaseId: String?, fieldId: Long?) {
+        launchReporting {
+            _lookupInfo.value = LookupInfo()
+            if (lookupDatabaseId == null) return@launchReporting
+            val fields = repository.fields(lookupDatabaseId)
+            _lookupInfo.value = LookupInfo(fields)
+            if (fieldId != null) {
+                _lookupInfo.value = LookupInfo(fields, repository.distinctValues(lookupDatabaseId, fieldId))
+            }
+        }
     }
 
     fun deleteField(field: FieldDef) = change {

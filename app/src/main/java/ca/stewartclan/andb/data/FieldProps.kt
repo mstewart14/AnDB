@@ -15,16 +15,19 @@ sealed interface FieldProps {
         /** Settings a new field of [type] starts with. */
         fun default(type: FieldType): FieldProps = when (type) {
             FieldType.ID -> IdProps()
+            FieldType.LIST -> ListProps()
             else -> NoProps
         }
 
         fun decode(type: FieldType, text: String): FieldProps = when (type) {
             FieldType.ID -> json.decodeFromString(IdProps.serializer(), text)
+            FieldType.LIST -> json.decodeFromString(ListProps.serializer(), text)
             else -> NoProps
         }
 
         fun encode(props: FieldProps): String = when (props) {
             is IdProps -> json.encodeToString(IdProps.serializer(), props)
+            is ListProps -> json.encodeToString(ListProps.serializer(), props)
             NoProps -> "{}"
         }
     }
@@ -67,3 +70,15 @@ data class IdProps(
         const val MAX_PADDING = 12
     }
 }
+
+/**
+ * Settings of a List field: choices come from [items], or from [lookup] when set. Records store the
+ * chosen text itself (a snapshot), so editing the choices later never changes existing records.
+ */
+@Serializable
+data class ListProps(val items: List<String> = emptyList(), val multiple: Boolean = false, val lookup: Lookup? = null) :
+    FieldProps
+
+/** Choices taken from the current values of field [fieldId] in database [databaseId]. */
+@Serializable
+data class Lookup(val databaseId: String, val fieldId: Long)

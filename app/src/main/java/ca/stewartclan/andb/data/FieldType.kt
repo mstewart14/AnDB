@@ -15,7 +15,8 @@ enum class Storage(val sqlType: String?) {
 
 /**
  * Field types (see docs/design.md). [code] is what is written to the field table, so it must never
- * change once released; the enum names and order are free to change.
+ * change once released; the enum names and order are free to change. [storage] is the usual record
+ * column; [FieldDef.storage] has the final say, since a field's settings can change it.
  */
 enum class FieldType(val code: String, val storage: Storage) {
     STRING("string", Storage.TEXT),
@@ -37,16 +38,6 @@ enum class FieldType(val code: String, val storage: Storage) {
     CREATED("created", Storage.NONE),
     MODIFIED("modified", Storage.NONE),
     ID("id", Storage.ANY);
-
-    /**
-     * Whether a field changed from this type to [other] keeps its stored values as they are.
-     * Becoming an ID replaces every value with a generated one.
-     */
-    fun keepsValuesAs(other: FieldType): Boolean = when {
-        storage == Storage.NONE -> true
-        other == ID -> this == ID
-        else -> storage == other.storage
-    }
 
     companion object {
         private val byCode = entries.associateBy { it.code }

@@ -229,7 +229,7 @@ class DatabaseRepositoryTest {
 
         val codes = column(id, "f${f.id}")
         assertEquals(3, codes.toSet().size)
-        assertTrue(codes.all { Regex("[A-Z2-9]{4}-[A-Z2-9]{4}").matches(it) })
+        assertTrue(codes.all { it != null && Regex("[A-Z2-9]{4}-[A-Z2-9]{4}").matches(it) })
         assertEquals(0L, metaCount(id, "next_id.${f.id}"))
     }
 
@@ -273,7 +273,91 @@ class DatabaseRepositoryTest {
         assertEquals(listOf("1"), column(id, "f${f.id}"))
     }
 
-    private fun column(id: String, expr: String): List<String> = openRaw(id).use { db ->
+    @Test
+    fun listBecomingMultipleKeepsEachValueAsAChoice() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "Genre", FieldType.LIST, ListProps(listOf("Fiction", "History")))
+        insertRecord(id, "f${f.id}" to "Fiction")
+        insertRecord(id, "f${f.id}" to "")
+        insertRecord(id, "f${f.id}" to "History")
+
+        repository.updateField(id, f.id, "Genre", FieldType.LIST, ListProps(listOf("Fiction", "History"), true))
+
+        assertEquals(3, recordColumns(id).size)
+        assertEquals(listOf("1:Fiction", "3:History"), listRows(id, f.id))
+    }
+
+    @Test
+    fun listBecomingSingleKeepsFirstChoice() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "Genre", FieldType.LIST, ListProps(listOf("A", "B"), multiple = true))
+        val r1 = repository.createRecord(id)
+        val r2 = repository.createRecord(id)
+        repository.createRecord(id)
+        openRaw(id).use { db ->
+            db.execSQL("INSERT INTO list_f${f.id} VALUES ($r1, 'B'), ($r1, 'A'), ($r2, 'A')")
+        }
+
+        repository.updateField(id, f.id, "Genre", FieldType.LIST, ListProps(listOf("A", "B")))
+
+        assertEquals(listOf("B", "A", null), column(id, "f${f.id}"))
+        assertEquals(0L, tableCount(id, "list_f${f.id}"))
+    }
+
+    @Test
+    fun multiListToIdAndDeleteDropSideTable() = runBlocking {
+        val id = repository.create("Books")
+        val a = repository.addField(id, "A", FieldType.LIST, ListProps(listOf("x"), multiple = true))
+        val b = repository.addField(id, "B", FieldType.LIST, ListProps(listOf("x"), multiple = true))
+        repository.createRecord(id)
+        assertEquals(1L, tableCount(id, "list_f${a.id}"))
+
+        repository.updateField(id, a.id, "A", FieldType.ID, IdProps())
+        repository.deleteField(id, b.id)
+
+        assertEquals(listOf("1"), column(id, "f${a.id}"))
+        assertEquals(0L, tableCount(id, "list_f${a.id}"))
+        assertEquals(0L, tableCount(id, "list_f${b.id}"))
+    }
+
+    @Test
+    fun distinctValuesForLookups() = runBlocking {
+        val id = repository.create("Books")
+        val text = repository.addField(id, "Author", FieldType.STRING)
+        val multi = repository.addField(id, "Tags", FieldType.LIST, ListProps(listOf("x"), multiple = true))
+        val no = repository.addField(id, "No.", FieldType.ID, IdProps(prefix = "B-", padding = 3))
+        val section = repository.addField(id, "Details", FieldType.SECTION)
+        val r1 = repository.createRecord(id)
+        val r2 = repository.createRecord(id)
+        repository.createRecord(id)
+        openRaw(id).use { db ->
+            db.execSQL("UPDATE record SET f${text.id} = 'le Guin' WHERE _id = $r1")
+            db.execSQL("UPDATE record SET f${text.id} = 'Banks' WHERE _id = $r2")
+            db.execSQL("INSERT INTO list_f${multi.id} VALUES ($r1, 'sf'), ($r2, 'sf'), ($r2, 'Classic')")
+        }
+
+        assertEquals(listOf("Banks", "le Guin"), repository.distinctValues(id, text.id))
+        assertEquals(listOf("Classic", "sf"), repository.distinctValues(id, multi.id))
+        assertEquals(listOf("B-001", "B-002", "B-003"), repository.distinctValues(id, no.id))
+        assertEquals(emptyList<String>(), repository.distinctValues(id, section.id))
+        assertEquals(emptyList<String>(), repository.distinctValues(id, 999))
+    }
+
+    private fun listRows(id: String, fieldId: Long): List<String> = openRaw(id).use { db ->
+        db.rawQuery("SELECT record_id, value FROM list_f$fieldId ORDER BY record_id, rowid", null).use { c ->
+            buildList { while (c.moveToNext()) add("${c.getLong(0)}:${c.getString(1)}") }
+        }
+    }
+
+    private fun tableCount(id: String, name: String): Long = openRaw(id).use { db ->
+        DatabaseUtils.longForQuery(
+            db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+            arrayOf(name)
+        )
+    }
+
+    private fun column(id: String, expr: String): List<String?> = openRaw(id).use { db ->
         db.rawQuery("SELECT $expr FROM record ORDER BY _id", null).use { c ->
             buildList { while (c.moveToNext()) add(c.getString(0)) }
         }

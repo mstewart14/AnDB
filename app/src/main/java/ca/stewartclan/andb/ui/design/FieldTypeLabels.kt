@@ -4,9 +4,9 @@ import androidx.annotation.StringRes
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldType
 
-/** Types offered in the type picker. List, Link and Linked wait for the field properties editor. */
+/** Types offered in the type picker. Link and Linked wait for their settings editor. */
 val designableTypes: List<FieldType> =
-    FieldType.entries - setOf(FieldType.LIST, FieldType.LINK, FieldType.LINKED)
+    FieldType.entries - setOf(FieldType.LINK, FieldType.LINKED)
 
 @get:StringRes
 val FieldType.labelRes: Int

@@ -12,6 +12,7 @@ import java.io.File
  * - `andb_field`: one row per user-defined field, in display order, with its [FieldProps] as JSON.
  * - `record`: one row per record. Each field with storage gets a column named `f<field id>`, so
  *   renaming a field never touches the record table. ID columns have a unique index `u_f<field id>`.
+ * - `list_f<field id>`: the choices of a multiple-choice List field, one row per record and choice.
  */
 internal object DatabaseFile {
     const val EXTENSION = "db"
@@ -29,6 +30,8 @@ internal object DatabaseFile {
     const val SYSTEM_COLUMNS_DDL = "_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL"
 
     fun columnName(fieldId: Long) = "f$fieldId"
+
+    fun listTable(fieldId: Long) = "list_f$fieldId"
 
     /** `andb_meta` key holding the next value of an increment ID field. */
     fun nextIdKey(fieldId: Long) = "next_id.$fieldId"
@@ -105,6 +108,13 @@ internal fun SQLiteDatabase.rebuildRecordTable(columns: List<RecordColumn>) {
     columns.filter { it.unique }.forEach { createUniqueIndex(it.name) }
 }
 
+internal fun SQLiteDatabase.createListTable(fieldId: Long) {
+    execSQL(
+        "CREATE TABLE IF NOT EXISTS ${DatabaseFile.listTable(fieldId)} " +
+            "(record_id INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (record_id, value))"
+    )
+}
+
 internal fun SQLiteDatabase.createUniqueIndex(column: String) {
     execSQL("CREATE UNIQUE INDEX IF NOT EXISTS u_$column ON record ($column)")
 }
@@ -141,7 +151,7 @@ internal fun recordColumns(
     fields: List<FieldDef>,
     source: (FieldDef, String) -> String = { _, name -> name }
 ): List<RecordColumn> = fields.mapNotNull { field ->
-    field.type.storage.sqlType?.let { sqlType ->
+    field.storage.sqlType?.let { sqlType ->
         val name = DatabaseFile.columnName(field.id)
         RecordColumn(name, sqlType, source(field, name), unique = field.type == FieldType.ID)
     }

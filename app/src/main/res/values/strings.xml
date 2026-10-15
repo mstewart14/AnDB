@@ -11,6 +11,7 @@
     <string name="action_back">Back</string>
     <string name="action_move_up">Move up</string>
     <string name="action_move_down">Move down</string>
+    <string name="action_remove">Remove</string>
 
     <string name="error_operation_failed">Couldn\u2019t save the change: %1$s</string>
 
@@ -43,6 +44,7 @@
     <string name="design_add_field">Add field</string>
     <string name="design_edit_field">Edit field</string>
     <string name="design_type_label">Type</string>
+    <string name="design_drag_handle">Drag to reorder</string>
     <string name="design_name_duplicate">A field with this name already exists</string>
     <string name="design_delete_title">Delete field \u201c%1$s\u201d?</string>
     <plurals name="design_delete_body">
@@ -95,4 +97,26 @@
         <item quantity="one">The ID of %1$d record will be regenerated.</item>
         <item quantity="other">All %1$d IDs will be regenerated.</item>
     </plurals>
+
+    <string name="list_source_fixed">Fixed items</string>
+    <string name="list_source_lookup">From a database</string>
+    <string name="list_item_placeholder">Item %1$d</string>
+    <string name="list_add_item">Add item</string>
+    <string name="list_items_invalid">Items must not be blank or repeated</string>
+    <string name="list_multiple">Allow multiple choices</string>
+    <string name="list_lookup_database">Database</string>
+    <string name="list_lookup_field">Field</string>
+    <string name="list_lookup_no_values">No values in this field yet.</string>
+    <plurals name="list_lookup_values">
+        <item quantity="one">%1$d value now: %2$s</item>
+        <item quantity="other">%1$d values now: %2$s</item>
+    </plurals>
+    <string name="list_single_warning">Records with several choices will keep only the first.</string>
+    <string name="list_summary_multiple">multiple choice</string>
+    <plurals name="list_summary_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="list_summary_lookup">from %1$s</string>
+    <string name="list_summary_lookup_missing">source database missing</string>
 </resources>
