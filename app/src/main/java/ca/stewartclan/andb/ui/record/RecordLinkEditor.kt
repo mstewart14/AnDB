@@ -1,15 +1,24 @@
 package ca.stewartclan.andb.ui.record
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,6 +37,7 @@ import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.RecordRef
+import ca.stewartclan.andb.ui.common.Facet
 
 /**
  * A link to a record: the linked record's title (tap to open it), and buttons to choose another or
@@ -83,6 +93,7 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
         RecordChooser(
             title = field.name,
             titles = titles,
+            facets = ctx.state.linkFacets[field.id].orEmpty(),
             onPick = { recordId ->
                 ctx.onLink(field, LinkValue(RecordRef(databaseId, recordId).uri, titles.getValue(recordId), null))
                 choosing = false
@@ -92,18 +103,31 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     }
 }
 
-/** A searchable list of records, by title, to pick one. */
+/**
+ * A searchable list of records, by title, to pick one. Each of [facets] gets a menu to show only
+ * the records with one of its values, and their values are shown under each title.
+ */
 @Composable
-private fun RecordChooser(title: String, titles: Map<Long, String>, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+private fun RecordChooser(
+    title: String,
+    titles: Map<Long, String>,
+    facets: List<Facet>,
+    onPick: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
     var search by remember { mutableStateOf("") }
+    var narrowed by remember { mutableStateOf(mapOf<Long, String>()) }
     val shown = titles.entries
-        .filter { it.value.contains(search.trim(), ignoreCase = true) }
+        .filter { (recordId, text) ->
+            text.contains(search.trim(), ignoreCase = true) && facets.all { it.admits(narrowed, recordId) }
+        }
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.value })
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column {
+                FacetMenus(facets, titles.keys, narrowed, onNarrow = { narrowed = it })
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
@@ -122,14 +146,8 @@ private fun RecordChooser(title: String, titles: Map<Long, String>, onPick: (Lon
                 }
                 LazyColumn(Modifier.heightIn(max = CHOOSER_HEIGHT)) {
                     items(shown, key = { it.key }) { (recordId, text) ->
-                        Text(
-                            text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onPick(recordId) }
-                                .padding(vertical = 12.dp)
-                        )
+                        val groups = facets.flatMap { it.byRecord[recordId].orEmpty() }.joinToString(" · ")
+                        ChoiceRow(text, groups, onClick = { onPick(recordId) })
                         HorizontalDivider()
                     }
                 }
@@ -139,5 +157,82 @@ private fun RecordChooser(title: String, titles: Map<Long, String>, onPick: (Lon
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
     )
 }
+
+/** A record's [title], with its facet values ([groups]) below it in small print. */
+@Composable
+private fun ChoiceRow(title: String, groups: String, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        if (groups.isNotEmpty()) {
+            Text(
+                groups,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * A menu for each of [facets] narrowing records [recordIds] to one of its values; [narrowed] holds
+ * the value chosen for each facet that has one, by field id.
+ */
+@Composable
+private fun FacetMenus(
+    facets: List<Facet>,
+    recordIds: Set<Long>,
+    narrowed: Map<Long, String>,
+    onNarrow: (Map<Long, String>) -> Unit
+) {
+    if (facets.isEmpty()) return
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        facets.forEach { facet ->
+            // Only values some record still has, given the other facets' choices.
+            val others = narrowed - facet.fieldId
+            val offered = facet.values.filter { value ->
+                recordIds.any { id -> value in facet.byRecord[id].orEmpty() && facets.all { it.admits(others, id) } }
+            }
+            FacetMenu(facet.name, narrowed[facet.fieldId], offered) { value ->
+                onNarrow(if (value == null) others else others + (facet.fieldId to value))
+            }
+        }
+    }
+}
+
+/** A chip naming facet [name] and its [chosen] value ("Any" if none), opening a menu of [values]. */
+@Composable
+private fun FacetMenu(name: String, chosen: String?, values: List<String>, onChoose: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val any = stringResource(R.string.record_link_any)
+    Box {
+        FilterChip(
+            selected = chosen != null,
+            onClick = { open = true },
+            label = { Text(stringResource(R.string.record_link_facet, name, chosen ?: any)) },
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(any) }, onClick = {
+                onChoose(null)
+                open = false
+            })
+            values.forEach { value ->
+                DropdownMenuItem(text = { Text(value) }, onClick = {
+                    onChoose(value)
+                    open = false
+                })
+            }
+        }
+    }
+}
+
+/** Whether record [recordId] has the value [narrowed] holds for this facet, if any. */
+private fun Facet.admits(narrowed: Map<Long, String>, recordId: Long): Boolean =
+    narrowed[fieldId]?.let { it in byRecord[recordId].orEmpty() } ?: true
 
 private val CHOOSER_HEIGHT = 360.dp

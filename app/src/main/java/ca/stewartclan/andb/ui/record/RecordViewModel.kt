@@ -19,6 +19,8 @@ import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.RequiredRule
 import ca.stewartclan.andb.ui.common.BrowseOrder
+import ca.stewartclan.andb.ui.common.Facet
+import ca.stewartclan.andb.ui.common.LinkChoices
 import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import java.time.Instant
@@ -50,6 +52,8 @@ data class RecordUiState(
     val listChoices: Map<Long, List<String>>,
     /** For each Link field to records: the titles of the records it can link to, by record id. */
     val recordTitles: Map<Long, Map<Long, String>> = emptyMap(),
+    /** For each Link field to records: fields of the linked database to narrow its chooser by. */
+    val linkFacets: Map<Long, List<Facet>> = emptyMap(),
     /** For each Linked field: what it shows for each record its Link field can link to. */
     val linkedValues: Map<Long, Map<Long, String>> = emptyMap(),
     /** Records in any database linking to this one. */
@@ -268,7 +272,9 @@ class RecordViewModel(
         }
         val listChoices = _state.value?.listChoices ?: fields.filter { it.type == FieldType.LIST }
             .associate { it.id to records.choicesFor(it) }
-        val recordTitles = _state.value?.recordTitles ?: loadTitles(fields)
+        val choices = if (_state.value == null) loadChoices(fields) else null
+        val recordTitles = _state.value?.recordTitles ?: choices.orEmpty().mapValues { it.value.titles }
+        val linkFacets = _state.value?.linkFacets ?: choices.orEmpty().mapValues { it.value.facets }
         val linkedValues = _state.value?.linkedValues ?: stores.titles.linkedValues(fields)
         val links = links(fields, record) + prelinked(recordTitles)
         _state.value = RecordUiState(
@@ -280,6 +286,7 @@ class RecordViewModel(
             links = links,
             listChoices = listChoices,
             recordTitles = recordTitles,
+            linkFacets = linkFacets,
             linkedValues = linkedValues,
             backlinks = if (record.id == NEW_RECORD_ID) emptyList() else loadBacklinks(record.id)
         )
@@ -316,14 +323,21 @@ class RecordViewModel(
     /** Reloads linked records' titles, which may have changed elsewhere; when the screen is shown again. */
     fun refreshLinks() = launchReporting {
         val state = _state.value ?: return@launchReporting
-        val titles = loadTitles(state.fields)
+        val choices = loadChoices(state.fields)
         val linked = stores.titles.linkedValues(state.fields)
         val backlinks = if (state.isNew) emptyList() else loadBacklinks(state.record.id)
-        _state.update { it?.copy(recordTitles = titles, linkedValues = linked, backlinks = backlinks) }
+        _state.update {
+            it?.copy(
+                recordTitles = choices.mapValues { (_, c) -> c.titles },
+                linkFacets = choices.mapValues { (_, c) -> c.facets },
+                linkedValues = linked,
+                backlinks = backlinks
+            )
+        }
     }
 
-    private suspend fun loadTitles(fields: List<FieldDef>): Map<Long, Map<Long, String>> =
-        fields.mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
+    private suspend fun loadChoices(fields: List<FieldDef>): Map<Long, LinkChoices> =
+        fields.mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.choices(it) } }.toMap()
 
     override fun onCleared() {
         saveInBackground()

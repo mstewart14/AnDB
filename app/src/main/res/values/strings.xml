@@ -236,6 +236,8 @@
     <string name="record_link_choose">Choose record</string>
     <string name="record_link_deleted">Linked record deleted</string>
     <string name="record_link_none_to_choose">That database has no records yet.</string>
+    <string name="record_link_facet">%1$s: %2$s</string>
+    <string name="record_link_any">Any</string>
 
     <string name="backlinks_title">Linked from</string>
     <string name="backlinks_group">%1$s \u00b7 %2$s (%3$d)</string>

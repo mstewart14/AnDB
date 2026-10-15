@@ -87,7 +87,10 @@ very large photo collections would need the planned copy-into-app mode.
   this one) and a **display field** of it (what the link shows; the first
   field by default). One linked record per Link field.
 - Record view: the linked record's display value; tap to open it; choose a
-  record from a searchable list; remove.
+  record from a searchable list; remove. The list offers a menu for each field
+  of the target database that sorts its records into a few groups (2–30
+  values, e.g. an aroma's Type and Category) to narrow it, and shows those
+  values under each title.
 - **Linked** fields: read-only live display of a field of the record linked
   through a chosen Link field of the same database. Shown in the record view
   and as list columns; Find matches them.
