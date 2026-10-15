@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder glyph: a table with a header row, inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- header row -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,34h44a4,4 0,0 1,4 4v8h-52v-8a4,4 0,0 1,4 -4z" />
+    <!-- table outline -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:pathData="M32,34h44a4,4 0,0 1,4 4v32a4,4 0,0 1,-4 4h-44a4,4 0,0 1,-4 -4v-32a4,4 0,0 1,4 -4z" />
+    <!-- row and column rules -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:pathData="M28,59h52M48,46v28" />
+</vector>

@@ -1,0 +1,22 @@
+# Overrides on top of detekt's default config (buildUponDefaultConfig = true).
+
+naming:
+  # Only counts classes/objects, so a screen file holding its @Serializable route object plus
+  # composable functions is flagged. That's the standard Compose layout.
+  MatchingDeclarationName:
+    active: false
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9]*'
+
+complexity:
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']

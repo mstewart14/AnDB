@@ -1,0 +1,4 @@
+<resources>
+    <!-- Window theme only; all in-app styling comes from Compose Material 3. -->
+    <style name="Theme.AnDB" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
