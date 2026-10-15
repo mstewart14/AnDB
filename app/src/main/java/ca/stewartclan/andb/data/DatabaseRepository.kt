@@ -51,6 +51,32 @@ class DatabaseRepository(
         id
     }
 
+    /**
+     * Copies database [id] as a new database named [name] and returns its id: its design, list
+     * views and filters, and with [withRecords] its records. Links and List lookups to the database
+     * itself point into the copy instead. Without records, ID counters start over.
+     */
+    suspend fun duplicate(id: String, name: String, withRecords: Boolean): String = mutate {
+        val copyId = UUID.randomUUID().toString()
+        val copy = fileFor(copyId)
+        // Every change goes through this lock and closes its connection, so the file is at rest.
+        fileFor(id).copyTo(copy)
+        try {
+            withDatabase(copyId) {
+                transaction {
+                    setMeta(DatabaseFile.META_NAME, name)
+                    setMeta(DatabaseFile.META_CREATED, clock().toString())
+                    pointSelfReferencesAt(id, copyId, withRecords)
+                    if (!withRecords) clearRecords()
+                }
+            }
+        } catch (e: SQLiteException) {
+            copy.delete()
+            throw e
+        }
+        copyId
+    }
+
     suspend fun rename(id: String, name: String) = mutate {
         withDatabase(id) { setMeta(DatabaseFile.META_NAME, name) }
     }

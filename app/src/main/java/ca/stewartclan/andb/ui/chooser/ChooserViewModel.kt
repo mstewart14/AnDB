@@ -31,6 +31,16 @@ class ChooserViewModel(private val repository: DatabaseRepository) : ReportingVi
         launchReporting { repository.rename(database.id, name.trim()) }
     }
 
+    /** Copies [database] as [name]: its design, and its records if [withRecords]. */
+    fun duplicate(database: DatabaseSummary, name: String, withRecords: Boolean) {
+        launchReporting { repository.duplicate(database.id, name.trim(), withRecords) }
+    }
+
+    /** "<name> copy", or "<name> copy 2"… if that name is taken. */
+    fun copyName(database: DatabaseSummary, copy: (String) -> String): String =
+        (sequenceOf(copy(database.name)) + generateSequence(2) { it + 1 }.map { "${copy(database.name)} $it" })
+            .first { checkName(it) == NameProblem.OK }
+
     fun delete(database: DatabaseSummary) {
         launchReporting { repository.delete(database.id) }
     }

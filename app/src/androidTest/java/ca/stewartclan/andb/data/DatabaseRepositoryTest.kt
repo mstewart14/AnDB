@@ -442,6 +442,53 @@ class DatabaseRepositoryTest {
         assertEquals(emptyMap<Long, String>(), repository.linkTitles(id, aroma.id))
     }
 
+    /** Books with a numbered ID and a link to another book of its own; book 2 links to book 1. */
+    private suspend fun selfLinkedBooks(): Triple<String, FieldDef, FieldDef> {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING)
+        val no = repository.addField(id, "No", FieldType.ID)
+        val sequelOf = repository.addField(id, "Sequel of", FieldType.LINK, LinkProps(LinkSource.RECORD, id, title.id))
+        val dune = records.insert(id, mapOf(title.id to "Dune"), emptyMap())
+        records.insert(
+            id,
+            mapOf(title.id to "Dune Messiah", sequelOf.id to LinkValue(RecordRef(id, dune).uri, "Dune", null)),
+            emptyMap()
+        )
+        return Triple(id, no, sequelOf)
+    }
+
+    @Test
+    fun duplicateWithRecordsCopiesThemAndPointsSelfLinksAtTheCopy() = runBlocking {
+        val (id, no, sequelOf) = selfLinkedBooks()
+
+        val copy = repository.duplicate(id, "Books copy", withRecords = true)
+
+        assertEquals("Books copy", repository.databases.value!!.first { it.id == copy }.name)
+        assertEquals(repository.fields(id).map { it.name }, repository.fields(copy).map { it.name })
+        assertEquals(copy, repository.fields(copy).first { it.id == sequelOf.id }.recordLink?.databaseId)
+        val copied = records.records(copy)
+        assertEquals(listOf(1L, 2L), copied.map { it.values[no.id] })
+        assertEquals(RecordRef(copy, 1).uri, (copied[1].values[sequelOf.id] as LinkValue).uri)
+        assertEquals("Dune", (copied[1].values[sequelOf.id] as LinkValue).name)
+        // The original is untouched.
+        assertEquals(RecordRef(id, 1).uri, (records.records(id)[1].values[sequelOf.id] as LinkValue).uri)
+        assertEquals(id, repository.fields(id).first { it.id == sequelOf.id }.recordLink?.databaseId)
+    }
+
+    @Test
+    fun duplicateDesignOnlyStartsEmptyWithIdsFromTheStart() = runBlocking {
+        val (id, no, sequelOf) = selfLinkedBooks()
+
+        val copy = repository.duplicate(id, "Empty books", withRecords = false)
+
+        assertTrue(records.records(copy).isEmpty())
+        assertEquals(copy, repository.fields(copy).first { it.id == sequelOf.id }.recordLink?.databaseId)
+        val first = records.insert(copy, emptyMap(), emptyMap())
+        assertEquals(1L, first)
+        assertEquals(IdProps().start, records.record(copy, first)!!.values[no.id])
+        assertEquals(2, records.records(id).size)
+    }
+
     private fun listRows(id: String, fieldId: Long): List<String> = openRaw(id).use { db ->
         db.rawQuery("SELECT record_id, value FROM list_f$fieldId ORDER BY record_id, rowid", null).use { c ->
             buildList { while (c.moveToNext()) add("${c.getLong(0)}:${c.getString(1)}") }

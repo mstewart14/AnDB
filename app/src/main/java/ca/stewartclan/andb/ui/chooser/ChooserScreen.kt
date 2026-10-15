@@ -68,6 +68,7 @@ fun ChooserScreen(
     var newOpen by rememberSaveable { mutableStateOf(false) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var duplicateId by rememberSaveable { mutableStateOf<String?>(null) }
 
     ChooserContent(
         databases = databases,
@@ -75,6 +76,7 @@ fun ChooserScreen(
         onOpen = { onOpenDatabase(it.id) },
         onNewDatabase = { newOpen = true },
         onRename = { renameId = it.id },
+        onDuplicate = { duplicateId = it.id },
         onDelete = { deleteId = it.id }
     )
 
@@ -104,6 +106,7 @@ fun ChooserScreen(
             onDismiss = { renameId = null }
         )
     }
+    databases?.find { it.id == duplicateId }?.let { DuplicateDatabase(it, viewModel, onClose = { duplicateId = null }) }
     databases?.find { it.id == deleteId }?.let { db ->
         DeleteDialog(
             database = db,
@@ -124,6 +127,7 @@ fun ChooserContent(
     onOpen: (DatabaseSummary) -> Unit,
     onNewDatabase: () -> Unit,
     onRename: (DatabaseSummary) -> Unit,
+    onDuplicate: (DatabaseSummary) -> Unit,
     onDelete: (DatabaseSummary) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -142,7 +146,13 @@ fun ChooserContent(
             databases.isEmpty() -> EmptyChooser(Modifier.padding(innerPadding))
             else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = innerPadding) {
                 items(databases, key = { it.id }) { db ->
-                    DatabaseRow(db, onOpen = { onOpen(db) }, onRename = { onRename(db) }, onDelete = { onDelete(db) })
+                    DatabaseRow(
+                        db,
+                        onOpen = { onOpen(db) },
+                        onRename = { onRename(db) },
+                        onDuplicate = { onDuplicate(db) },
+                        onDelete = { onDelete(db) }
+                    )
                     HorizontalDivider()
                 }
             }
@@ -169,7 +179,13 @@ private fun EmptyChooser(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DatabaseRow(database: DatabaseSummary, onOpen: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
+private fun DatabaseRow(
+    database: DatabaseSummary,
+    onOpen: () -> Unit,
+    onRename: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit
+) {
     var menuOpen by remember { mutableStateOf(false) }
     ListItem(
         modifier = Modifier.clickable(onClick = onOpen),
@@ -199,6 +215,13 @@ private fun DatabaseRow(database: DatabaseSummary, onOpen: () -> Unit, onRename:
                         onClick = {
                             menuOpen = false
                             onRename()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_duplicate)) },
+                        onClick = {
+                            menuOpen = false
+                            onDuplicate()
                         }
                     )
                     DropdownMenuItem(
@@ -280,7 +303,7 @@ private val previewDatabases = listOf(
 @Composable
 private fun ChooserContentPreview() {
     AnDbTheme(dynamicColor = false) {
-        ChooserContent(previewDatabases, remember { SnackbarHostState() }, {}, {}, {}, {})
+        ChooserContent(previewDatabases, remember { SnackbarHostState() }, {}, {}, {}, {}, {})
     }
 }
 
@@ -288,6 +311,6 @@ private fun ChooserContentPreview() {
 @Composable
 private fun ChooserContentEmptyPreview() {
     AnDbTheme(dynamicColor = false) {
-        ChooserContent(emptyList(), remember { SnackbarHostState() }, {}, {}, {}, {})
+        ChooserContent(emptyList(), remember { SnackbarHostState() }, {}, {}, {}, {}, {})
     }
 }

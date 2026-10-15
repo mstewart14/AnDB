@@ -24,6 +24,14 @@
     <string name="chooser_empty_body">Tap + to design your first database.</string>
     <string name="chooser_new_database">New database</string>
     <string name="chooser_rename_database">Rename database</string>
+    <string name="action_duplicate">Duplicate\u2026</string>
+    <string name="chooser_duplicate_database">Duplicate database</string>
+    <string name="chooser_copy_name">%1$s copy</string>
+    <string name="chooser_duplicate_design_only">Design only</string>
+    <string name="chooser_duplicate_design_only_explained">Fields, list views and filters, with no records</string>
+    <string name="chooser_duplicate_with_records">Design and records</string>
+    <string name="chooser_duplicate_with_records_explained">A full copy, records included</string>
+    <string name="action_duplicate_confirm">Duplicate</string>
     <string name="chooser_name_duplicate">A database with this name already exists</string>
     <string name="chooser_delete_title">Delete “%1$s”?</string>
     <plurals name="chooser_delete_body">
