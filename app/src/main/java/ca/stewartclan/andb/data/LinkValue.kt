@@ -15,3 +15,11 @@ class LinkValue(val uri: String, val name: String, val thumbnail: ByteArray?) {
 
     override fun toString(): String = name
 }
+
+/**
+ * What pointing a Link field to records at another database carries over: [links] matched in the
+ * new database, by record id (records not in it keep their old link, shown as unavailable; null
+ * clears every link instead), and the new target field of each Linked field showing through it,
+ * by Linked field id (null for the new database's display field).
+ */
+data class Repoint(val links: Map<Long, LinkValue>?, val linkedTargets: Map<Long, Long?>)

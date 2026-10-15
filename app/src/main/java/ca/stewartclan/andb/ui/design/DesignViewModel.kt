@@ -10,11 +10,14 @@ import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
+import ca.stewartclan.andb.data.LinkProps
 import ca.stewartclan.andb.data.LinkedProps
+import ca.stewartclan.andb.data.Repoint
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
 import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +25,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-class DesignViewModel(private val repository: DatabaseRepository, val databaseId: String) : ReportingViewModel() {
+/** What relinking by title would do when Link field [fieldId] is pointed at [link]'s database. */
+data class RelinkPreview(val fieldId: Long, val link: LinkProps, val plan: RelinkPlan)
+
+class DesignViewModel(
+    private val repository: DatabaseRepository,
+    private val titles: RecordTitles,
+    val databaseId: String
+) : ReportingViewModel() {
 
     val database: StateFlow<DatabaseSummary?> = repository.databases
         .map { dbs -> dbs?.find { it.id == databaseId } }
@@ -56,10 +66,45 @@ class DesignViewModel(private val repository: DatabaseRepository, val databaseId
         repository.addField(databaseId, entered.name.trim(), entered.type, entered.props, entered.required)
     }
 
-    /** Saves [entered] over [field], if anything changed. */
-    fun updateField(field: FieldDef, entered: FieldDef) = change {
+    /**
+     * Saves [entered] over [field], if anything changed. A Link to records pointed at another
+     * database keeps the links found there by title if [relink], and its Linked fields show the
+     * field of the same name there.
+     */
+    fun updateField(field: FieldDef, entered: FieldDef, relink: Boolean) = change {
         val new = entered.copy(id = field.id, position = field.position, name = entered.name.trim())
-        if (new != field) repository.updateField(databaseId, new)
+        if (new != field) repository.updateField(databaseId, new, repoint(field, new, relink))
+    }
+
+    private val _relinkPreview = MutableStateFlow<RelinkPreview?>(null)
+
+    /** What relinking would do for the Link field being edited, once worked out. */
+    val relinkPreview: StateFlow<RelinkPreview?> = _relinkPreview.asStateFlow()
+
+    private var previewJob: Job? = null
+
+    /** Works out [relinkPreview] for pointing Link field [field] at [link]'s database. */
+    fun loadRelinkPreview(field: FieldDef, link: LinkProps) {
+        // Only the latest choice counts; an earlier, slower one mustn't land after it.
+        previewJob?.cancel()
+        previewJob = launchReporting {
+            _relinkPreview.value = null
+            _relinkPreview.value = RelinkPreview(field.id, link, relinkPlan(field, link))
+        }
+    }
+
+    private suspend fun relinkPlan(field: FieldDef, link: LinkProps): RelinkPlan =
+        Relink.plan(repository.linkTitles(databaseId, field.id), titles.titles(link), link.databaseId.orEmpty())
+
+    private suspend fun repoint(old: FieldDef, new: FieldDef, relink: Boolean): Repoint? {
+        val to = new.recordLink?.takeIf { isRepoint(old, new) } ?: return null
+        // The old database may be gone, and with it the names of the fields Linked fields showed.
+        val oldTargets = runCatching { repository.fields(old.recordLink?.databaseId.orEmpty()) }.getOrNull()
+        val newTargets = repository.fields(to.databaseId.orEmpty())
+        return Repoint(
+            links = if (relink) relinkPlan(old, to).links else null,
+            linkedTargets = Relink.linkedTargets(fields.value.orEmpty(), old.id, oldTargets, newTargets)
+        )
     }
 
     /** Moves [field] [by] places in display order (negative is up). */
@@ -121,8 +166,10 @@ class DesignViewModel(private val repository: DatabaseRepository, val databaseId
     companion object {
         val Factory = viewModelFactory {
             initializer {
+                val app = this[APPLICATION_KEY] as AnDbApplication
                 DesignViewModel(
-                    (this[APPLICATION_KEY] as AnDbApplication).repository,
+                    app.repository,
+                    app.recordTitles,
                     createSavedStateHandle().toRoute<DesignRoute>().databaseId
                 )
             }

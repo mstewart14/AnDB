@@ -63,6 +63,17 @@ class DatabaseRepository(
         withDatabase(id) { readFields() }
     }
 
+    /** The saved title of each link in Link field [fieldId] of database [id], by record id. */
+    suspend fun linkTitles(id: String, fieldId: Long): Map<Long, String> = withContext(ioDispatcher) {
+        withDatabase(id) {
+            rawQuery(
+                "SELECT l.record_id, l.name FROM ${DatabaseFile.linkTable(fieldId)} l " +
+                    "JOIN record r ON r._id = l.record_id WHERE r.${DatabaseFile.columnName(fieldId)} IS NOT NULL",
+                null
+            ).use { c -> buildMap { while (c.moveToNext()) put(c.getLong(0), c.getString(1)) } }
+        }
+    }
+
     /**
      * Appends a field after the existing ones, adding its record column if it has storage. A new
      * ID field gives every existing record an ID.
@@ -95,8 +106,9 @@ class DatabaseRepository(
      * converted with SQL `CAST` (so text that isn't a number becomes 0), or dropped when the new
      * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID. A List
      * switched to multiple choices keeps each value as a choice; switched back, it keeps the first.
+     * A Link field to records pointed at another database carries over what [repoint] says.
      */
-    suspend fun updateField(id: String, field: FieldDef) = mutate {
+    suspend fun updateField(id: String, field: FieldDef, repoint: Repoint? = null) = mutate {
         withDatabase(id) {
             transaction {
                 val fields = readFields()
@@ -110,7 +122,14 @@ class DatabaseRepository(
                 if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
                 if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
                 if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
-                updateLink(old, new)
+                updateLink(old, new, repoint?.links)
+                repoint?.linkedTargets?.forEach { (linkedId, targetId) ->
+                    val linked = fields.find { it.id == linkedId }?.props as? LinkedProps ?: return@forEach
+                    execSQL(
+                        "UPDATE andb_field SET props = ? WHERE id = ?",
+                        arrayOf(FieldProps.encode(linked.copy(targetFieldId = targetId)), linkedId)
+                    )
+                }
                 if (type == FieldType.ID) updateIds(old, new, idGenerator)
                 if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(new.id))
             }

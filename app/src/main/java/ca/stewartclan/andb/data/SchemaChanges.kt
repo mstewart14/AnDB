@@ -90,16 +90,28 @@ internal fun SQLiteDatabase.updateIds(old: FieldDef, new: FieldDef, idGenerator:
 
 /**
  * Starts or ends a field's life as a Link: a new Link starts empty with its snapshot table (other
- * values aren't links); a Link now linking to something else starts empty again; a former Link
- * loses its snapshots.
+ * values aren't links); a Link now linking to something else starts empty again, unless given
+ * [relinked] links to replace the old ones with (others stay as they were); a former Link loses
+ * its snapshots.
  */
-internal fun SQLiteDatabase.updateLink(old: FieldDef, new: FieldDef) {
+internal fun SQLiteDatabase.updateLink(old: FieldDef, new: FieldDef, relinked: Map<Long, LinkValue>? = null) {
+    val column = DatabaseFile.columnName(new.id)
     if (new.type == FieldType.LINK && old.type != FieldType.LINK) {
-        execSQL("UPDATE record SET ${DatabaseFile.columnName(new.id)} = NULL")
+        execSQL("UPDATE record SET $column = NULL")
         createLinkTable(new.id)
+    } else if (new.type == FieldType.LINK && !old.linksTheSameWay(new) && relinked != null) {
+        relinked.forEach { (recordId, link) ->
+            execSQL("UPDATE record SET $column = ? WHERE _id = ?", arrayOf(link.uri, recordId))
+            execSQL(
+                "INSERT OR REPLACE INTO ${DatabaseFile.linkTable(
+                    new.id
+                )} (record_id, name, thumbnail) VALUES (?, ?, ?)",
+                arrayOf(recordId, link.name, link.thumbnail)
+            )
+        }
     } else if (new.type == FieldType.LINK && !old.linksTheSameWay(new)) {
         // Now linking to something else: the old links mean nothing.
-        execSQL("UPDATE record SET ${DatabaseFile.columnName(new.id)} = NULL")
+        execSQL("UPDATE record SET $column = NULL")
         execSQL("DELETE FROM ${DatabaseFile.linkTable(new.id)}")
     } else if (old.type == FieldType.LINK && new.type != FieldType.LINK) {
         execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkTable(old.id)}")

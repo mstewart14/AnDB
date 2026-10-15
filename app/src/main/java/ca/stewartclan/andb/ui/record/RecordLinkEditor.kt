@@ -49,7 +49,8 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val link = ctx.state.links[field.id]
     val ref = link?.let { RecordRef.parse(it.uri) }
     val titles = ctx.state.recordTitles[field.id].orEmpty()
-    val title = ref?.let { titles[it.recordId] }
+    // A link left from a database the field linked to before has no title here.
+    val title = field.linkedRecordId(link)?.let { titles[it] }
     var choosing by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier) {

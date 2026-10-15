@@ -54,6 +54,20 @@
         <item quantity="one">Its value in %1$d record will be permanently deleted.</item>
         <item quantity="other">Its values in %1$d records will be permanently deleted.</item>
     </plurals>
+    <string name="relink_by_title">Relink by title</string>
+    <string name="relink_matching">Matching links by title…</string>
+    <plurals name="relink_found">
+        <item quantity="one">%1$d link will be relinked to the record with the same title.</item>
+        <item quantity="other">%1$d links will be relinked to the records with the same titles.</item>
+    </plurals>
+    <plurals name="relink_unmatched">
+        <item quantity="one">%1$d has no single match there and will show as unavailable.</item>
+        <item quantity="other">%1$d have no single match there and will show as unavailable.</item>
+    </plurals>
+    <plurals name="relink_clear">
+        <item quantity="one">The link in %1$d record will be cleared.</item>
+        <item quantity="other">The links in %1$d records will be cleared.</item>
+    </plurals>
     <plurals name="design_type_change_warning">
         <item quantity="one">The value in %1$d record will be converted to the new type or removed.</item>
         <item quantity="other">Values in %1$d records will be converted to the new type or removed.</item>

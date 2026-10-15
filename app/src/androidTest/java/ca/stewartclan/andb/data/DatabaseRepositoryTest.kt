@@ -401,6 +401,47 @@ class DatabaseRepositoryTest {
         assertEquals(listOf(false, true), repository.fields(id).map { it.required })
     }
 
+    @Test
+    fun repointingALinkRelinksTheGivenLinksAndKeepsTheRest() = runBlocking {
+        val oldAromas = repository.create("Aromas")
+        val newAromas = repository.create("Aromas again")
+        val id = repository.create("Tastings")
+        val aroma = repository.addField(id, "Aroma", FieldType.LINK, LinkProps(LinkSource.RECORD, oldAromas))
+        val category = repository.addField(id, "Category", FieldType.LINKED, LinkedProps(aroma.id, targetFieldId = 7))
+        val lemon = records.insert(
+            id,
+            mapOf(aroma.id to LinkValue(RecordRef(oldAromas, 1).uri, "Lemon", null)),
+            emptyMap()
+        )
+        val cardamon =
+            records.insert(id, mapOf(aroma.id to LinkValue(RecordRef(oldAromas, 2).uri, "Cardamon", null)), emptyMap())
+        val none = records.insert(id, emptyMap(), emptyMap())
+
+        assertEquals(mapOf(lemon to "Lemon", cardamon to "Cardamon"), repository.linkTitles(id, aroma.id))
+
+        val relinked = LinkValue(RecordRef(newAromas, 40).uri, "Lemon", null)
+        val moved = aroma.copy(props = LinkProps(LinkSource.RECORD, newAromas))
+        repository.updateField(id, moved, Repoint(mapOf(lemon to relinked), mapOf(category.id to 3L)))
+
+        assertEquals(relinked, records.record(id, lemon)!!.values[aroma.id])
+        // Not found in the new database: the old link and its title stay, to show as unavailable.
+        assertEquals(RecordRef(oldAromas, 2).uri, (records.record(id, cardamon)!!.values[aroma.id] as LinkValue).uri)
+        assertEquals(null, records.record(id, none)!!.values[aroma.id])
+        assertEquals(3L, (repository.fields(id).first { it.id == category.id }.props as LinkedProps).targetFieldId)
+    }
+
+    @Test
+    fun repointingALinkWithoutRelinkingClearsIt() = runBlocking {
+        val id = repository.create("Tastings")
+        val aroma = repository.addField(id, "Aroma", FieldType.LINK, LinkProps(LinkSource.RECORD, "a"))
+        val r = records.insert(id, mapOf(aroma.id to LinkValue(RecordRef("a", 1).uri, "Lemon", null)), emptyMap())
+
+        repository.updateField(id, aroma.copy(props = LinkProps(LinkSource.RECORD, "b")), Repoint(null, emptyMap()))
+
+        assertEquals(null, records.record(id, r)!!.values[aroma.id])
+        assertEquals(emptyMap<Long, String>(), repository.linkTitles(id, aroma.id))
+    }
+
     private fun listRows(id: String, fieldId: Long): List<String> = openRaw(id).use { db ->
         db.rawQuery("SELECT record_id, value FROM list_f$fieldId ORDER BY record_id, rowid", null).use { c ->
             buildList { while (c.moveToNext()) add("${c.getLong(0)}:${c.getString(1)}") }

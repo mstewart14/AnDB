@@ -188,7 +188,8 @@ private const val NOTE_LINES = 3
 
 /** What Linked [field] shows: its target field of the record linked through its Link field. */
 private fun linkedText(field: FieldDef, state: RecordUiState): String {
-    val props = field.props as? LinkedProps
-    val ref = props?.let { state.links[it.linkFieldId] }?.let { RecordRef.parse(it.uri) }
-    return ref?.let { state.linkedValues[field.id]?.get(it.recordId) }.orEmpty()
+    val linkFieldId = (field.props as? LinkedProps)?.linkFieldId
+    val linkField = state.fields.find { it.id == linkFieldId }
+    val recordId = linkField?.linkedRecordId(state.links[linkField.id])
+    return recordId?.let { state.linkedValues[field.id]?.get(it) }.orEmpty()
 }

@@ -18,6 +18,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +54,9 @@ class LookupContext(
     val currentDatabaseId: String
 )
 
+/** What [FieldDialog] needs to preview relinking a Link field pointed at another database. */
+class RelinkContext(val preview: RelinkPreview?, val onLoad: (FieldDef, LinkProps) -> Unit)
+
 /** Adds a field when [field] is null, otherwise edits its name, type and settings. */
 @Composable
 fun FieldDialog(
@@ -61,16 +65,22 @@ fun FieldDialog(
     field: FieldDef?,
     recordCount: Long,
     lookup: LookupContext,
+    relink: RelinkContext,
     check: (String) -> NameProblem,
-    /** Gets the field as entered: name, type, settings and required (id and position unset). */
-    onConfirm: (FieldDef) -> Unit,
+    /**
+     * Gets the field as entered: name, type, settings and required (id and position unset), and
+     * whether to relink by title if it's a Link pointed at another database.
+     */
+    onConfirm: (FieldDef, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val draft = rememberFieldDraft(field)
     val problem = check(draft.name.text)
     val entered = draft.toField()
     val canConfirm = problem == NameProblem.OK && entered != null
-    val confirm = { if (canConfirm && entered != null) onConfirm(entered) }
+    // Whether a Link pointed at another database keeps the links found there by title.
+    var relinkByTitle by rememberSaveable { mutableStateOf(true) }
+    val confirm = { if (canConfirm && entered != null) onConfirm(entered, relinkByTitle) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -88,7 +98,12 @@ fun FieldDialog(
                 TypePicker(draft.type, onTypeChange = { draft.type = it }, modifier = Modifier.padding(top = 8.dp))
                 FieldSettings(draft, lookup, field?.id, Modifier.padding(top = 8.dp))
                 val type = draft.type
-                ChangeWarning(field, entered ?: FieldDef(0, 0, "", type, FieldProps.default(type)), recordCount)
+                val new = entered ?: FieldDef(0, 0, "", type, FieldProps.default(type))
+                if (field != null && isRepoint(field, new)) {
+                    RelinkOptions(field, new, relink, relinkByTitle, onRelinkChange = { relinkByTitle = it })
+                } else {
+                    ChangeWarning(field, new, recordCount)
+                }
             }
         },
         confirmButton = {
@@ -182,6 +197,7 @@ private fun ChangeWarning(old: FieldDef?, new: FieldDef, recordCount: Long) {
         ChangeEffect.ID_REGENERATE -> pluralStringResource(R.plurals.id_regenerate_warning, count, recordCount)
         ChangeEffect.KEEP_FIRST_CHOICE -> stringResource(R.string.list_single_warning)
         ChangeEffect.CONVERT -> pluralStringResource(R.plurals.design_type_change_warning, count, recordCount)
+        ChangeEffect.RELINK -> return // RelinkOptions explains it.
     }
     Text(
         message,
@@ -193,6 +209,45 @@ private fun ChangeWarning(old: FieldDef?, new: FieldDef, recordCount: Long) {
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 8.dp)
     )
+}
+
+/**
+ * For Link field [old] pointed at [new]'s other database: a switch to [relink] by title, and what
+ * that (or clearing the links instead) does, from [context]'s preview.
+ */
+@Composable
+private fun RelinkOptions(
+    old: FieldDef,
+    new: FieldDef,
+    context: RelinkContext,
+    relink: Boolean,
+    onRelinkChange: (Boolean) -> Unit
+) {
+    val link = new.recordLink ?: return
+    LaunchedEffect(link) { context.onLoad(old, link) }
+    val plan = context.preview?.takeIf { it.fieldId == old.id && it.link == link }?.plan
+    val unmatched = plan?.let { it.notFound + it.ambiguous } ?: 0
+    val total = plan?.let { it.links.size + unmatched } ?: 0
+    // Nothing to carry over: no record has a link here.
+    if (plan != null && total == 0) return
+    Column(Modifier.padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.relink_by_title), modifier = Modifier.weight(1f))
+            Switch(checked = relink, onCheckedChange = onRelinkChange)
+        }
+        val message = when {
+            plan == null -> stringResource(R.string.relink_matching)
+            !relink -> pluralStringResource(R.plurals.relink_clear, total, total)
+            unmatched == 0 -> pluralStringResource(R.plurals.relink_found, plan.links.size, plan.links.size)
+            else -> pluralStringResource(R.plurals.relink_found, plan.links.size, plan.links.size) + " " +
+                pluralStringResource(R.plurals.relink_unmatched, unmatched, unmatched)
+        }
+        Text(
+            message,
+            color = if (relink) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -74,6 +74,10 @@ class RecordTitles(private val repository: DatabaseRepository, private val recor
         private fun title(field: FieldDef?, record: Record): String =
             field?.let { FieldValues.shown(it, record) }.orEmpty().ifBlank { "#${record.id}" }
 
+        /** The ids of the records in [titles] titled [title], ignoring case and surrounding spaces. */
+        fun matching(title: String, titles: Map<Long, String>): Set<Long> =
+            title.trim().let { wanted -> titles.filterValues { it.trim().equals(wanted, ignoreCase = true) }.keys }
+
         /** Most values a field may have and still narrow a record chooser. */
         const val MAX_FACET_VALUES = 30
 

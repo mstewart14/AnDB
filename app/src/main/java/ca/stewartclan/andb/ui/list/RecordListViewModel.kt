@@ -169,7 +169,8 @@ class RecordListViewModel(
         val titles = (columns.map { it.field } + searchable).distinct()
             .mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
         val linked = stores.titles.linkedValues(fields)
-        val shownText = { field: FieldDef, record: Record -> shown(field, record, titles, linked) }
+        val byId = fields.associateBy { it.id }
+        val shownText = { field: FieldDef, record: Record -> shown(field, record, titles, linked, byId) }
         val entries = records.records(databaseId, view.sort).map { record ->
             Entry(
                 record,
@@ -231,14 +232,17 @@ class RecordListViewModel(
         field: FieldDef,
         record: Record,
         titles: Map<Long, Map<Long, String>>,
-        linked: Map<Long, Map<Long, String>>
+        linked: Map<Long, Map<Long, String>>,
+        byId: Map<Long, FieldDef>
     ): String {
-        val linkedVia = (field.props as? LinkedProps)?.linkFieldId
-        val link = record.values[linkedVia ?: field.id] as? LinkValue
-        val ref = link?.let { RecordRef.parse(it.uri) }
+        val linkedVia = (field.props as? LinkedProps)?.let { byId[it.linkFieldId] }
+        val link = record.values[(linkedVia ?: field).id] as? LinkValue
+        // A link left from a database the field linked to before shows only its saved title.
+        val recordId = (linkedVia ?: field).linkedRecordId(link)
         return when {
-            linkedVia != null -> ref?.let { linked[field.id]?.get(it.recordId) }.orEmpty()
-            ref != null -> titles[field.id]?.get(ref.recordId) ?: link.name
+            field.props is LinkedProps -> recordId?.let { linked[field.id]?.get(it) }.orEmpty()
+            link != null && RecordRef.parse(link.uri) != null -> recordId?.let { titles[field.id]?.get(it) }
+                ?: link.name
             else -> FieldValues.shown(field, record)
         }
     }

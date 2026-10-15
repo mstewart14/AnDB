@@ -25,6 +25,13 @@ data class FieldDef(
     /** For a Link field to records, which database and display field; null for other fields. */
     val recordLink: LinkProps? get() = (props as? LinkProps)?.takeIf { it.source == LinkSource.RECORD }
 
+    /**
+     * The id of the record this Link field's [link] points at, if it points into the field's
+     * database; null for a link left over from a database the field linked to before.
+     */
+    fun linkedRecordId(link: LinkValue?): Long? = link?.let { RecordRef.parse(it.uri) }
+        ?.takeIf { it.databaseId == recordLink?.databaseId }?.recordId
+
     /** Whether values are text (or may be, as IDs), so text matching and case apply. */
     val isTextual: Boolean get() = isMultiList || storage == Storage.TEXT || storage == Storage.ANY
 

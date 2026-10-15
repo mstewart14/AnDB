@@ -19,7 +19,10 @@ enum class ChangeEffect {
     KEEP_FIRST_CHOICE,
 
     /** Values are converted to the new type, or removed. */
-    CONVERT
+    CONVERT,
+
+    /** A Link to records now links to another database: links can be carried over by title. */
+    RELINK
 }
 
 /** The effect on existing values of saving [new] over [old] (null when adding a field), if any. */
@@ -27,8 +30,16 @@ fun changeEffect(old: FieldDef?, new: FieldDef): ChangeEffect? = when {
     new.type == FieldType.ID -> idChangeEffect(old, new)
     old == null -> null
     old.isMultiList && new.type == FieldType.LIST && !new.isMultiList -> ChangeEffect.KEEP_FIRST_CHOICE
+    isRepoint(old, new) -> ChangeEffect.RELINK
     !old.keepsValuesAs(new) -> ChangeEffect.CONVERT
     else -> null
+}
+
+/** Whether [old] and [new] are Links to records of two different databases. */
+fun isRepoint(old: FieldDef, new: FieldDef): Boolean {
+    val from = old.recordLink?.databaseId
+    val to = new.recordLink?.databaseId
+    return from != null && to != null && from != to
 }
 
 private fun idChangeEffect(old: FieldDef?, new: FieldDef): ChangeEffect? = when {

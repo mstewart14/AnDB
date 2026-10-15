@@ -102,6 +102,13 @@ very large photo collections would need the planned copy-into-app mode.
   may become options later.)
 - Record ids are never reused, so a link can't silently point at a new record
   after its target is deleted.
+- Pointing a Link field at another database (e.g. one rebuilt from scratch,
+  which gets a new id) offers **Relink by title**, on by default, with a
+  preview of the counts: each link whose snapshot title matches exactly one
+  record there (ignoring case) is relinked; the rest keep their snapshot and
+  show as unavailable. Off, the links are cleared. Linked fields showing
+  through it move to the field of the same name. A link is only resolved in
+  its field's current database, never by record id alone.
 
 **Device links (planned).** Contacts and files the same way: snapshot, fallback
 identifiers (contact name/phone/email, iCalendar UID) to re-match after sync.

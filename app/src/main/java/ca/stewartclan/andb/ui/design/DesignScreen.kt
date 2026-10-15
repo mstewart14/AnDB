@@ -76,6 +76,7 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val recordCount = database?.recordCount ?: 0
     val lookupContext = rememberLookupContext(viewModel)
+    val relinkPreview by viewModel.relinkPreview.collectAsStateWithLifecycle()
 
     DesignContent(
         databaseName = database?.name.orEmpty(),
@@ -98,9 +99,10 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
             field = editing,
             recordCount = recordCount,
             lookup = lookupContext,
+            relink = RelinkContext(relinkPreview, viewModel::loadRelinkPreview),
             check = { viewModel.checkName(it, editing = editing) },
-            onConfirm = { entered ->
-                if (editing == null) viewModel.addField(entered) else viewModel.updateField(editing, entered)
+            onConfirm = { entered, relink ->
+                if (editing == null) viewModel.addField(entered) else viewModel.updateField(editing, entered, relink)
                 editId = null
             },
             onDismiss = { editId = null }
