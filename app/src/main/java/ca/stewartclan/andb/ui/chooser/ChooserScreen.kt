@@ -57,6 +57,7 @@ object ChooserRoute
 @Composable
 fun ChooserScreen(
     onOpenDatabase: (String) -> Unit,
+    onCreatedDatabase: (String) -> Unit,
     viewModel: ChooserViewModel = viewModel(factory = ChooserViewModel.Factory)
 ) {
     val databases by viewModel.databases.collectAsStateWithLifecycle()
@@ -84,7 +85,7 @@ fun ChooserScreen(
             initialName = "",
             check = viewModel::checkName,
             onConfirm = {
-                viewModel.create(it, onCreated = onOpenDatabase)
+                viewModel.create(it, onCreated = onCreatedDatabase)
                 newOpen = false
             },
             onDismiss = { newOpen = false }

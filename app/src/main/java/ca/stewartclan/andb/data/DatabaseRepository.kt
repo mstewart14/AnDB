@@ -27,8 +27,8 @@ data class DatabaseSummary(val id: String, val name: String, val recordCount: Lo
 class DatabaseRepository(
     private val dir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val clock: () -> Instant = Instant::now,
-    private val idGenerator: IdGenerator = IdGenerator()
+    internal val clock: () -> Instant = Instant::now,
+    internal val idGenerator: IdGenerator = IdGenerator()
 ) {
     private val writeLock = Mutex()
     private val _databases = MutableStateFlow<List<DatabaseSummary>?>(null)
@@ -170,22 +170,13 @@ class DatabaseRepository(
         }
     }
 
-    /** Adds an empty record, assigning its ID fields, and returns its record id. */
-    suspend fun createRecord(id: String): Long = mutate {
-        withDatabase(id) {
-            transaction {
-                val now = clock().toString()
-                execSQL("INSERT INTO record (_created, _modified) VALUES (?, ?)", arrayOf(now, now))
-                val recordId = longQuery("SELECT last_insert_rowid()")
-                readFields().filter { it.type == FieldType.ID }.forEach { field ->
-                    execSQL(
-                        "UPDATE record SET ${DatabaseFile.columnName(field.id)} = ? WHERE _id = ?",
-                        arrayOf(nextIdValue(field, idGenerator), recordId)
-                    )
-                }
-                recordId
-            }
-        }
+    /** Reads database [id] off the main thread. For [RecordRepository]. */
+    internal suspend fun <T> read(id: String, block: SQLiteDatabase.() -> T): T =
+        withContext(ioDispatcher) { withDatabase(id, block) }
+
+    /** Changes database [id] in one transaction, serialised with all other changes. For [RecordRepository]. */
+    internal suspend fun <T> write(id: String, block: SQLiteDatabase.() -> T): T = mutate {
+        withDatabase(id) { transaction { block() } }
     }
 
     private fun fileFor(id: String): File {

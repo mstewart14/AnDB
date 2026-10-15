@@ -119,4 +119,26 @@
     </plurals>
     <string name="list_summary_lookup">from %1$s</string>
     <string name="list_summary_lookup_missing">source database missing</string>
+
+    <string name="list_new_record">New record</string>
+    <string name="list_edit_design">Edit design</string>
+    <string name="list_empty_title">No records yet</string>
+    <string name="list_empty_body">Tap + to add the first record.</string>
+    <string name="list_empty_no_fields">Use \u22ee \u203a Edit design to add fields, then tap + to add records.</string>
+    <string name="list_empty_record">(empty)</string>
+
+    <string name="record_position">%1$d of %2$d</string>
+    <string name="record_previous">Previous record</string>
+    <string name="record_next">Next record</string>
+    <string name="record_protect">Protect from changes</string>
+    <string name="record_duplicate">Duplicate</string>
+    <string name="record_delete_title">Delete this record?</string>
+    <string name="record_no_fields">This database has no fields yet.</string>
+    <string name="record_clear">Clear</string>
+    <string name="record_none">(none)</string>
+    <string name="record_open_value">Open</string>
+    <plurals name="record_rating_star">
+        <item quantity="one">%1$d star</item>
+        <item quantity="other">%1$d stars</item>
+    </plurals>
 </resources>

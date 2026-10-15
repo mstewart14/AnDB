@@ -20,12 +20,14 @@ import org.junit.runner.RunWith
 class DatabaseRepositoryTest {
     private lateinit var dir: File
     private lateinit var repository: DatabaseRepository
+    private lateinit var records: RecordRepository
 
     @Before
     fun setUp() {
         dir = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "repo-test")
         dir.deleteRecursively()
         repository = DatabaseRepository(dir)
+        records = RecordRepository(repository)
     }
 
     @After
@@ -173,12 +175,12 @@ class DatabaseRepositoryTest {
     @Test
     fun newIdFieldNumbersExistingRecordsOldestFirst() = runBlocking {
         val id = repository.create("Books")
-        repeat(3) { repository.createRecord(id) }
+        repeat(3) { records.create(id) }
         val f = repository.addField(id, "No.", FieldType.ID, IdProps(start = 100))
 
         assertEquals(listOf("100", "101", "102"), column(id, "f${f.id}"))
         assertEquals(listOf("integer"), column(id, "DISTINCT typeof(f${f.id})"))
-        val next = repository.createRecord(id)
+        val next = records.create(id)
         assertEquals("103", value(id, "f${f.id}", next))
     }
 
@@ -186,11 +188,11 @@ class DatabaseRepositoryTest {
     fun incrementNeverReusesNumbers() = runBlocking {
         val id = repository.create("Books")
         val f = repository.addField(id, "No.", FieldType.ID)
-        repository.createRecord(id)
-        val second = repository.createRecord(id)
+        records.create(id)
+        val second = records.create(id)
         openRaw(id).use { it.execSQL("DELETE FROM record WHERE _id = $second") }
 
-        val third = repository.createRecord(id)
+        val third = records.create(id)
         assertEquals("3", value(id, "f${f.id}", third))
     }
 
@@ -198,12 +200,12 @@ class DatabaseRepositoryTest {
     fun raisingStartMovesCounterButLoweringDoesNot() = runBlocking {
         val id = repository.create("Books")
         val f = repository.addField(id, "No.", FieldType.ID)
-        repository.createRecord(id)
+        records.create(id)
 
         repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 500))
-        assertEquals("500", value(id, "f${f.id}", repository.createRecord(id)))
+        assertEquals("500", value(id, "f${f.id}", records.create(id)))
         repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 1))
-        assertEquals("501", value(id, "f${f.id}", repository.createRecord(id)))
+        assertEquals("501", value(id, "f${f.id}", records.create(id)))
     }
 
     @Test
@@ -212,7 +214,7 @@ class DatabaseRepositoryTest {
         val v4 = repository.addField(id, "A", FieldType.ID, IdProps(IdKind.UUID_RANDOM))
         val v7 = repository.addField(id, "B", FieldType.ID, IdProps(IdKind.UUID_TIME))
         val code = repository.addField(id, "C", FieldType.ID, IdProps(IdKind.SHORT_CODE))
-        val record = repository.createRecord(id)
+        val record = records.create(id)
 
         assertEquals(4, UUID.fromString(value(id, "f${v4.id}", record)).version())
         assertEquals(7, UUID.fromString(value(id, "f${v7.id}", record)).version())
@@ -223,7 +225,7 @@ class DatabaseRepositoryTest {
     fun changingKindRegeneratesEveryId() = runBlocking {
         val id = repository.create("Books")
         val f = repository.addField(id, "No.", FieldType.ID)
-        repeat(3) { repository.createRecord(id) }
+        repeat(3) { records.create(id) }
 
         repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(IdKind.SHORT_CODE))
 
@@ -250,7 +252,7 @@ class DatabaseRepositoryTest {
         val id = repository.create("Books")
         val f = repository.addField(id, "No.", FieldType.ID)
         val other = repository.addField(id, "Title", FieldType.STRING)
-        repository.createRecord(id)
+        records.create(id)
         repository.deleteField(id, other.id)
 
         assertEquals(1L, indexCount(id, "u_f${f.id}"))
@@ -264,7 +266,7 @@ class DatabaseRepositoryTest {
     fun idStopsBeingIdWhenRetyped() = runBlocking {
         val id = repository.create("Books")
         val f = repository.addField(id, "No.", FieldType.ID)
-        repository.createRecord(id)
+        records.create(id)
 
         repository.updateField(id, f.id, "No.", FieldType.INTEGER, NoProps)
 
@@ -291,9 +293,9 @@ class DatabaseRepositoryTest {
     fun listBecomingSingleKeepsFirstChoice() = runBlocking {
         val id = repository.create("Books")
         val f = repository.addField(id, "Genre", FieldType.LIST, ListProps(listOf("A", "B"), multiple = true))
-        val r1 = repository.createRecord(id)
-        val r2 = repository.createRecord(id)
-        repository.createRecord(id)
+        val r1 = records.create(id)
+        val r2 = records.create(id)
+        records.create(id)
         openRaw(id).use { db ->
             db.execSQL("INSERT INTO list_f${f.id} VALUES ($r1, 'B'), ($r1, 'A'), ($r2, 'A')")
         }
@@ -309,7 +311,7 @@ class DatabaseRepositoryTest {
         val id = repository.create("Books")
         val a = repository.addField(id, "A", FieldType.LIST, ListProps(listOf("x"), multiple = true))
         val b = repository.addField(id, "B", FieldType.LIST, ListProps(listOf("x"), multiple = true))
-        repository.createRecord(id)
+        records.create(id)
         assertEquals(1L, tableCount(id, "list_f${a.id}"))
 
         repository.updateField(id, a.id, "A", FieldType.ID, IdProps())
@@ -327,9 +329,9 @@ class DatabaseRepositoryTest {
         val multi = repository.addField(id, "Tags", FieldType.LIST, ListProps(listOf("x"), multiple = true))
         val no = repository.addField(id, "No.", FieldType.ID, IdProps(prefix = "B-", padding = 3))
         val section = repository.addField(id, "Details", FieldType.SECTION)
-        val r1 = repository.createRecord(id)
-        val r2 = repository.createRecord(id)
-        repository.createRecord(id)
+        val r1 = records.create(id)
+        val r2 = records.create(id)
+        records.create(id)
         openRaw(id).use { db ->
             db.execSQL("UPDATE record SET f${text.id} = 'le Guin' WHERE _id = $r1")
             db.execSQL("UPDATE record SET f${text.id} = 'Banks' WHERE _id = $r2")
