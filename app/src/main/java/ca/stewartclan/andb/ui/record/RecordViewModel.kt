@@ -15,6 +15,7 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
+import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -70,6 +71,7 @@ class RecordViewModel(
     /** Saves started when leaving the screen run here, so they finish after the ViewModel is gone. */
     private val appScope: CoroutineScope,
     private val savedState: SavedStateHandle,
+    private val browseOrder: BrowseOrder,
     private val databaseId: String,
     startRecordId: Long
 ) : ReportingViewModel() {
@@ -225,7 +227,7 @@ class RecordViewModel(
             .associate { it.id to records.choicesFor(it) }
         _state.value = RecordUiState(
             fields = fields,
-            recordIds = records.recordIds(databaseId),
+            recordIds = browseOrder.arrange(databaseId, records.recordIds(databaseId)),
             record = record,
             drafts = record.values.mapValues { (_, v) -> FieldValues.toDraft(v) },
             chosen = record.choices,
@@ -253,6 +255,7 @@ class RecordViewModel(
                     app.records,
                     app.appScope,
                     savedState,
+                    app.browseOrder,
                     route.databaseId,
                     route.recordId
                 )

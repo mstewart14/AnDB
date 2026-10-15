@@ -13,6 +13,8 @@ naming:
 complexity:
   LongParameterList:
     ignoreAnnotated: ['Composable']
+    # ViewModels take their dependencies and route arguments by constructor.
+    constructorThreshold: 8
   # A repository's public API is one function per operation; 11 is too tight for that.
   TooManyFunctions:
     thresholdInClasses: 20

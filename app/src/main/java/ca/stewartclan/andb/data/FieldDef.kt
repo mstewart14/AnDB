@@ -15,6 +15,9 @@ data class FieldDef(
     /** How this field's values sit in the record table; [Storage.NONE] if not there. */
     val storage: Storage get() = if (isMultiList) Storage.NONE else type.storage
 
+    /** Whether values are text (or may be, as IDs), so text matching and case apply. */
+    val isTextual: Boolean get() = isMultiList || storage == Storage.TEXT || storage == Storage.ANY
+
     /** Whether the field holds values at all, in a record column or a side table. */
     val hasValues: Boolean get() = storage != Storage.NONE || isMultiList
 

@@ -13,6 +13,7 @@ import java.io.File
  * - `record`: one row per record. Each field with storage gets a column named `f<field id>`, so
  *   renaming a field never touches the record table. ID columns have a unique index `u_f<field id>`.
  * - `list_f<field id>`: the choices of a multiple-choice List field, one row per record and choice.
+ * - `andb_view`: named list views, with their columns and sort keys as JSON.
  */
 internal object DatabaseFile {
     const val EXTENSION = "db"
@@ -26,13 +27,23 @@ internal object DatabaseFile {
      */
     private val migrations: List<SQLiteDatabase.() -> Unit> = listOf(
         // 2: fields can be required.
-        { execSQL("ALTER TABLE andb_field ADD COLUMN required INTEGER NOT NULL DEFAULT 0") }
+        { execSQL("ALTER TABLE andb_field ADD COLUMN required INTEGER NOT NULL DEFAULT 0") },
+        // 3: named list views.
+        {
+            execSQL(
+                "CREATE TABLE andb_view (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
+                    "columns TEXT NOT NULL DEFAULT '[]', sort TEXT NOT NULL DEFAULT '[]')"
+            )
+        }
     )
 
     val SCHEMA_VERSION = migrations.size + 1
 
     const val META_NAME = "name"
     const val META_CREATED = "created"
+
+    /** `andb_meta` key of the list view last shown. */
+    const val META_CURRENT_VIEW = "current_view"
 
     /** Columns every record table starts with; field columns follow. */
     const val SYSTEM_COLUMNS = "_id, _created, _modified"

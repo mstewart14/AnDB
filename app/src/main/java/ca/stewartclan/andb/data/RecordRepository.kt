@@ -6,8 +6,11 @@ import android.database.sqlite.SQLiteDatabase
 /** Records of AnDB databases. Changes go through [databases] so they're serialised with design changes. */
 class RecordRepository(private val databases: DatabaseRepository) {
 
-    /** All records of database [id], oldest first. */
-    suspend fun records(id: String): List<Record> = databases.read(id) { readRecords(readFields(), null) }
+    /** All records of database [id], sorted by [sort] (oldest first by default). */
+    suspend fun records(id: String, sort: List<SortKey> = emptyList()): List<Record> = databases.read(id) {
+        val fields = readFields()
+        readRecords(fields, null, orderBy(fields, sort))
+    }
 
     /** Ids of all records of database [id], oldest first. */
     suspend fun recordIds(id: String): List<Long> = databases.read(id) {
@@ -144,13 +147,41 @@ class RecordRepository(private val databases: DatabaseRepository) {
         }
     }
 
-    /** Records with their values, all of them or only [onlyId]. */
-    private fun SQLiteDatabase.readRecords(fields: List<FieldDef>, onlyId: Long?): List<Record> {
+    /**
+     * `ORDER BY` terms for [sort]: empty values last whichever the direction, text without regard
+     * to case unless asked, and oldest record first among equals. Unknown fields are skipped.
+     */
+    private fun orderBy(fields: List<FieldDef>, sort: List<SortKey>): String {
+        val byId = fields.associateBy { it.id }
+        val terms = sort.mapNotNull { key ->
+            val field = byId[key.fieldId] ?: return@mapNotNull null
+            val expr = sortExpression(field) ?: return@mapNotNull null
+            val collate = if (field.isTextual && !key.caseSensitive) " COLLATE NOCASE" else ""
+            "($expr IS NULL), $expr$collate${if (key.descending) " DESC" else ""}"
+        }
+        return (terms + "_id").joinToString()
+    }
+
+    private fun sortExpression(field: FieldDef): String? = when {
+        field.type == FieldType.CREATED -> "_created"
+        field.type == FieldType.MODIFIED -> "_modified"
+        field.isMultiList ->
+            "(SELECT group_concat(value, ', ') FROM ${DatabaseFile.listTable(field.id)} WHERE record_id = record._id)"
+        field.storage == Storage.NONE -> null
+        else -> DatabaseFile.columnName(field.id)
+    }
+
+    /** Records with their values, all of them or only [onlyId], in [orderBy] order. */
+    private fun SQLiteDatabase.readRecords(
+        fields: List<FieldDef>,
+        onlyId: Long?,
+        orderBy: String = "_id"
+    ): List<Record> {
         val stored = fields.filter { it.storage != Storage.NONE }
         val columns = stored.joinToString("") { ", ${DatabaseFile.columnName(it.id)}" }
         val where = if (onlyId != null) "WHERE _id = $onlyId" else ""
         val choices = fields.filter { it.isMultiList }.associate { it.id to readChoices(it.id, onlyId) }
-        return rawQuery("SELECT _id, _created, _modified$columns FROM record $where ORDER BY _id", null).use { c ->
+        return rawQuery("SELECT _id, _created, _modified$columns FROM record $where ORDER BY $orderBy", null).use { c ->
             buildList {
                 while (c.moveToNext()) {
                     val recordId = c.getLong(0)

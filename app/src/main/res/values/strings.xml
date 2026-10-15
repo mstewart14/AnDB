@@ -127,7 +127,6 @@
     <string name="list_empty_title">No records yet</string>
     <string name="list_empty_body">Tap + to add the first record.</string>
     <string name="list_empty_no_fields">Use \u22ee \u203a Edit design to add fields, then tap + to add records.</string>
-    <string name="list_empty_record">(empty)</string>
 
     <string name="record_position">%1$d of %2$d</string>
     <string name="record_previous">Previous record</string>
@@ -150,4 +149,24 @@
         <item quantity="one">%1$d star</item>
         <item quantity="other">%1$d stars</item>
     </plurals>
+
+    <string name="view_default_name">All fields</string>
+    <string name="view_numbered_name">List view %1$d</string>
+    <string name="view_choose">Choose list view</string>
+    <string name="view_new">New list view</string>
+    <string name="view_edit">Edit list view</string>
+    <string name="view_delete">Delete list view</string>
+    <string name="view_delete_title">Delete list view \u201c%1$s\u201d?</string>
+    <string name="view_show_all">Show all fields</string>
+    <string name="view_columns">Columns</string>
+    <string name="view_add_column">Add column</string>
+    <string name="view_width_narrow">Narrow</string>
+    <string name="view_width_medium">Medium</string>
+    <string name="view_width_wide">Wide</string>
+    <string name="view_sort">Sort</string>
+    <string name="view_sort_none">Oldest record first.</string>
+    <string name="view_add_sort">Add sort level</string>
+    <string name="view_sort_ascending">Ascending</string>
+    <string name="view_sort_descending">Descending</string>
+    <string name="view_sort_case_sensitive">Case-sensitive</string>
 </resources>
