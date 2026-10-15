@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.chooser
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -22,13 +21,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,20 +35,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.DatabaseSummary
+import ca.stewartclan.andb.ui.common.ErrorSnackbar
+import ca.stewartclan.andb.ui.common.NameField
+import ca.stewartclan.andb.ui.common.NameProblem
+import ca.stewartclan.andb.ui.common.rememberNameState
 import ca.stewartclan.andb.ui.theme.AnDbTheme
 import kotlinx.serialization.Serializable
 
@@ -58,15 +55,23 @@ import kotlinx.serialization.Serializable
 object ChooserRoute
 
 @Composable
-fun ChooserRoute(viewModel: ChooserViewModel = viewModel(factory = ChooserViewModel.Factory)) {
+fun ChooserScreen(
+    onOpenDatabase: (String) -> Unit,
+    viewModel: ChooserViewModel = viewModel(factory = ChooserViewModel.Factory)
+) {
     val databases by viewModel.databases.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
     // Dialogs remember the database id rather than the summary, so they survive rotation.
     var newOpen by rememberSaveable { mutableStateOf(false) }
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    ChooserScreen(
+    ChooserContent(
         databases = databases,
+        snackbarHostState = snackbarHostState,
+        onOpen = { onOpenDatabase(it.id) },
         onNewDatabase = { newOpen = true },
         onRename = { renameId = it.id },
         onDelete = { deleteId = it.id }
@@ -79,7 +84,7 @@ fun ChooserRoute(viewModel: ChooserViewModel = viewModel(factory = ChooserViewMo
             initialName = "",
             check = viewModel::checkName,
             onConfirm = {
-                viewModel.create(it)
+                viewModel.create(it, onCreated = onOpenDatabase)
                 newOpen = false
             },
             onDismiss = { newOpen = false }
@@ -112,8 +117,10 @@ fun ChooserRoute(viewModel: ChooserViewModel = viewModel(factory = ChooserViewMo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChooserScreen(
+fun ChooserContent(
     databases: List<DatabaseSummary>?,
+    snackbarHostState: SnackbarHostState,
+    onOpen: (DatabaseSummary) -> Unit,
     onNewDatabase: () -> Unit,
     onRename: (DatabaseSummary) -> Unit,
     onDelete: (DatabaseSummary) -> Unit,
@@ -122,6 +129,7 @@ fun ChooserScreen(
     Scaffold(
         modifier = modifier,
         topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = onNewDatabase) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.chooser_new_database))
@@ -133,7 +141,7 @@ fun ChooserScreen(
             databases.isEmpty() -> EmptyChooser(Modifier.padding(innerPadding))
             else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = innerPadding) {
                 items(databases, key = { it.id }) { db ->
-                    DatabaseRow(db, onRename = { onRename(db) }, onDelete = { onDelete(db) })
+                    DatabaseRow(db, onOpen = { onOpen(db) }, onRename = { onRename(db) }, onDelete = { onDelete(db) })
                     HorizontalDivider()
                 }
             }
@@ -160,9 +168,10 @@ private fun EmptyChooser(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DatabaseRow(database: DatabaseSummary, onRename: () -> Unit, onDelete: () -> Unit) {
+private fun DatabaseRow(database: DatabaseSummary, onOpen: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     ListItem(
+        modifier = Modifier.clickable(onClick = onOpen),
         headlineContent = { Text(database.name) },
         supportingContent = {
             Text(
@@ -213,38 +222,19 @@ private fun NameDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length)))
-    }
+    var value by rememberNameState(initialName)
     val problem = check(value.text)
-    // A blank name is only an error once the user has typed something and cleared it again.
-    val showError = problem != NameProblem.OK && !(problem == NameProblem.BLANK && value.text.isEmpty())
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
+            NameField(
                 value = value,
                 onValueChange = { value = it },
-                label = { Text(stringResource(R.string.chooser_name_label)) },
-                singleLine = true,
-                isError = showError,
-                supportingText = if (showError) {
-                    { Text(problemMessage(problem)) }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { if (problem == NameProblem.OK) onConfirm(value.text) }
-                ),
-                modifier = Modifier.focusRequester(focus)
+                problem = problem,
+                duplicateMessage = stringResource(R.string.chooser_name_duplicate),
+                onDone = { onConfirm(value.text) }
             )
         },
         confirmButton = {
@@ -254,14 +244,6 @@ private fun NameDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
     )
-}
-
-@Composable
-private fun problemMessage(problem: NameProblem): String = when (problem) {
-    NameProblem.BLANK -> stringResource(R.string.chooser_name_blank)
-    NameProblem.TOO_LONG -> stringResource(R.string.chooser_name_too_long, DatabaseNameValidator.MAX_LENGTH)
-    NameProblem.DUPLICATE -> stringResource(R.string.chooser_name_duplicate)
-    NameProblem.OK -> ""
 }
 
 @Composable
@@ -295,16 +277,16 @@ private val previewDatabases = listOf(
 
 @Preview(showBackground = true)
 @Composable
-private fun ChooserScreenPreview() {
+private fun ChooserContentPreview() {
     AnDbTheme(dynamicColor = false) {
-        ChooserScreen(databases = previewDatabases, onNewDatabase = {}, onRename = {}, onDelete = {})
+        ChooserContent(previewDatabases, remember { SnackbarHostState() }, {}, {}, {}, {})
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-private fun ChooserScreenEmptyPreview() {
+private fun ChooserContentEmptyPreview() {
     AnDbTheme(dynamicColor = false) {
-        ChooserScreen(databases = emptyList(), onNewDatabase = {}, onRename = {}, onDelete = {})
+        ChooserContent(emptyList(), remember { SnackbarHostState() }, {}, {}, {}, {})
     }
 }

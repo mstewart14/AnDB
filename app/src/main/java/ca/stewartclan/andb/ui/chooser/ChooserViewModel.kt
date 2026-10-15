@@ -1,37 +1,38 @@
 package ca.stewartclan.andb.ui.chooser
 
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
+import ca.stewartclan.andb.ui.common.NameProblem
+import ca.stewartclan.andb.ui.common.NameValidator
+import ca.stewartclan.andb.ui.common.ReportingViewModel
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
-class ChooserViewModel(private val repository: DatabaseRepository) : ViewModel() {
+class ChooserViewModel(private val repository: DatabaseRepository) : ReportingViewModel() {
     /** `null` while the first load is in progress. */
     val databases: StateFlow<List<DatabaseSummary>?> = repository.databases
 
     init {
-        viewModelScope.launch { repository.refresh() }
+        launchReporting { repository.refresh() }
     }
 
     fun checkName(name: String, renaming: DatabaseSummary? = null): NameProblem =
-        DatabaseNameValidator.check(name, databases.value.orEmpty().map { it.name }, renaming?.name)
+        NameValidator.check(name, databases.value.orEmpty().map { it.name }, renaming?.name)
 
-    fun create(name: String) {
-        viewModelScope.launch { repository.create(name.trim()) }
+    /** Creates a database, then calls [onCreated] with its id so the caller can open its design. */
+    fun create(name: String, onCreated: (String) -> Unit) {
+        launchReporting { onCreated(repository.create(name.trim())) }
     }
 
     fun rename(database: DatabaseSummary, name: String) {
-        viewModelScope.launch { repository.rename(database.id, name.trim()) }
+        launchReporting { repository.rename(database.id, name.trim()) }
     }
 
     fun delete(database: DatabaseSummary) {
-        viewModelScope.launch { repository.delete(database.id) }
+        launchReporting { repository.delete(database.id) }
     }
 
     companion object {

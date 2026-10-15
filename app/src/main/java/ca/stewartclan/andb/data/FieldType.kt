@@ -34,6 +34,9 @@ enum class FieldType(val code: String, val storage: Storage) {
     CREATED("created", Storage.NONE),
     MODIFIED("modified", Storage.NONE);
 
+    /** Whether a field changed from this type to [other] keeps its stored values as they are. */
+    fun keepsValuesAs(other: FieldType): Boolean = storage == Storage.NONE || storage == other.storage
+
     companion object {
         private val byCode = entries.associateBy { it.code }
 

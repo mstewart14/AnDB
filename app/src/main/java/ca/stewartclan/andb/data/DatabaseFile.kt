@@ -24,6 +24,10 @@ internal object DatabaseFile {
     const val META_NAME = "name"
     const val META_CREATED = "created"
 
+    /** Columns every record table starts with; field columns follow. */
+    const val SYSTEM_COLUMNS = "_id, _created, _modified"
+    const val SYSTEM_COLUMNS_DDL = "_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL"
+
     fun columnName(fieldId: Long) = "f$fieldId"
 
     fun open(file: File): SQLiteDatabase {
@@ -49,9 +53,7 @@ internal object DatabaseFile {
                 )
                 """.trimIndent()
             )
-            execSQL(
-                "CREATE TABLE record (_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL)"
-            )
+            execSQL("CREATE TABLE record ($SYSTEM_COLUMNS_DDL)")
             setMeta(META_NAME, name)
             setMeta(META_CREATED, created)
             version = SCHEMA_VERSION
@@ -75,3 +77,60 @@ internal fun SQLiteDatabase.setMeta(key: String, value: String) {
 
 internal fun SQLiteDatabase.longQuery(sql: String, vararg args: String): Long =
     rawQuery(sql, args).use { if (it.moveToFirst()) it.getLong(0) else 0 }
+
+/** A field column of the rebuilt record table, filled from [source], an SQL expression over the old table. */
+internal data class RecordColumn(val name: String, val sqlType: String, val source: String)
+
+/**
+ * Recreates `record` with the system columns plus [columns], copying every row. Needed to drop or
+ * retype a column: Android's SQLite only gained `DROP COLUMN` in Android 14. Call inside a transaction.
+ */
+internal fun SQLiteDatabase.rebuildRecordTable(columns: List<RecordColumn>) {
+    val ddl = columns.joinToString("") { ", ${it.name} ${it.sqlType}" }
+    val names = columns.joinToString("") { ", ${it.name}" }
+    val sources = columns.joinToString("") { ", ${it.source}" }
+    execSQL("CREATE TABLE record_new (${DatabaseFile.SYSTEM_COLUMNS_DDL}$ddl)")
+    execSQL(
+        "INSERT INTO record_new (${DatabaseFile.SYSTEM_COLUMNS}$names) " +
+            "SELECT ${DatabaseFile.SYSTEM_COLUMNS}$sources FROM record"
+    )
+    execSQL("DROP TABLE record")
+    execSQL("ALTER TABLE record_new RENAME TO record")
+}
+
+internal fun SQLiteDatabase.readFields(): List<FieldDef> =
+    rawQuery("SELECT id, position, name, type FROM andb_field ORDER BY position", null).use { c ->
+        val id = c.getColumnIndexOrThrow("id")
+        val position = c.getColumnIndexOrThrow("position")
+        val name = c.getColumnIndexOrThrow("name")
+        val type = c.getColumnIndexOrThrow("type")
+        buildList {
+            while (c.moveToNext()) {
+                add(
+                    FieldDef(
+                        c.getLong(id),
+                        c.getInt(position),
+                        c.getString(name),
+                        FieldType.fromCode(c.getString(type))
+                    )
+                )
+            }
+        }
+    }
+
+/** Record columns for [fields] that have storage; [source] gives each one's value from the old table. */
+internal fun recordColumns(
+    fields: List<FieldDef>,
+    source: (FieldDef, String) -> String = { _, name -> name }
+): List<RecordColumn> = fields.mapNotNull { field ->
+    field.type.storage.sqlType?.let { sqlType ->
+        val name = DatabaseFile.columnName(field.id)
+        RecordColumn(name, sqlType, source(field, name))
+    }
+}
+
+internal fun SQLiteDatabase.writePositions(fieldIds: List<Long>) {
+    fieldIds.forEachIndexed { position, fieldId ->
+        execSQL("UPDATE andb_field SET position = ? WHERE id = ?", arrayOf(position, fieldId))
+    }
+}

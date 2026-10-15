@@ -60,26 +60,7 @@ class DatabaseRepository(
     }
 
     suspend fun fields(id: String): List<FieldDef> = withContext(ioDispatcher) {
-        withDatabase(id) {
-            rawQuery("SELECT id, position, name, type FROM andb_field ORDER BY position", null).use { c ->
-                val id = c.getColumnIndexOrThrow("id")
-                val position = c.getColumnIndexOrThrow("position")
-                val name = c.getColumnIndexOrThrow("name")
-                val type = c.getColumnIndexOrThrow("type")
-                buildList {
-                    while (c.moveToNext()) {
-                        add(
-                            FieldDef(
-                                c.getLong(id),
-                                c.getInt(position),
-                                c.getString(name),
-                                FieldType.fromCode(c.getString(type))
-                            )
-                        )
-                    }
-                }
-            }
-        }
+        withDatabase(id) { readFields() }
     }
 
     /** Appends a field after the existing ones, adding its record column if it has storage. */
@@ -96,6 +77,76 @@ class DatabaseRepository(
                     execSQL("ALTER TABLE record ADD COLUMN ${DatabaseFile.columnName(fieldId)} $sqlType")
                 }
                 FieldDef(fieldId, position, name, type)
+            }
+        }
+    }
+
+    suspend fun renameField(id: String, fieldId: Long, name: String) = mutate {
+        withDatabase(id) {
+            execSQL("UPDATE andb_field SET name = ? WHERE id = ?", arrayOf(name, fieldId))
+        }
+    }
+
+    /**
+     * Changes a field's type. Values are kept when the storage class is unchanged, converted with
+     * SQL `CAST` when it differs (so text that isn't a number becomes 0), and dropped when the new
+     * type has no storage.
+     */
+    suspend fun changeFieldType(id: String, fieldId: Long, type: FieldType) = mutate {
+        withDatabase(id) {
+            transaction {
+                val fields = readFields()
+                val old = fields.first { it.id == fieldId }
+                execSQL("UPDATE andb_field SET type = ? WHERE id = ?", arrayOf(type.code, fieldId))
+                val column = DatabaseFile.columnName(fieldId)
+                val newSqlType = type.storage.sqlType
+                when {
+                    old.type.storage == type.storage -> Unit
+                    old.type.storage == Storage.NONE -> execSQL("ALTER TABLE record ADD COLUMN $column $newSqlType")
+                    else -> rebuildRecordTable(
+                        recordColumns(
+                            fields.map {
+                                if (it.id ==
+                                    fieldId
+                                ) {
+                                    it.copy(type = type)
+                                } else {
+                                    it
+                                }
+                            }
+                        ) { field, name ->
+                            if (field.id == fieldId) "CAST($name AS $newSqlType)" else name
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    /** Moves a field to [toIndex] in display order, shifting the fields in between. */
+    suspend fun moveField(id: String, fieldId: Long, toIndex: Int) = mutate {
+        withDatabase(id) {
+            transaction {
+                val ids = readFields().map { it.id }.toMutableList()
+                require(ids.remove(fieldId)) { "No field $fieldId" }
+                ids.add(toIndex.coerceIn(0, ids.size), fieldId)
+                writePositions(ids)
+            }
+        }
+    }
+
+    /** Deletes a field and, if it has storage, its values in every record. */
+    suspend fun deleteField(id: String, fieldId: Long) = mutate {
+        withDatabase(id) {
+            transaction {
+                val fields = readFields()
+                val field = fields.first { it.id == fieldId }
+                execSQL("DELETE FROM andb_field WHERE id = ?", arrayOf(fieldId))
+                val remaining = fields - field
+                writePositions(remaining.map { it.id })
+                if (field.type.storage != Storage.NONE) {
+                    rebuildRecordTable(recordColumns(remaining))
+                }
             }
         }
     }

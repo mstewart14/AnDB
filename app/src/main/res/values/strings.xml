@@ -6,14 +6,22 @@
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_more">More options</string>
+    <string name="action_add">Add</string>
+    <string name="action_save">Save</string>
+    <string name="action_back">Back</string>
+    <string name="action_move_up">Move up</string>
+    <string name="action_move_down">Move down</string>
+
+    <string name="error_operation_failed">Couldn\u2019t save the change: %1$s</string>
+
+    <string name="name_label">Name</string>
+    <string name="name_blank">Enter a name</string>
+    <string name="name_too_long">Maximum length is %1$d</string>
 
     <string name="chooser_empty_title">No databases yet</string>
     <string name="chooser_empty_body">Tap + to design your first database.</string>
     <string name="chooser_new_database">New database</string>
     <string name="chooser_rename_database">Rename database</string>
-    <string name="chooser_name_label">Name</string>
-    <string name="chooser_name_blank">Enter a name</string>
-    <string name="chooser_name_too_long">Maximum length is %1$d</string>
     <string name="chooser_name_duplicate">A database with this name already exists</string>
     <string name="chooser_delete_title">Delete “%1$s”?</string>
     <plurals name="chooser_delete_body">
@@ -28,4 +36,40 @@
         <item quantity="one">%1$d field</item>
         <item quantity="other">%1$d fields</item>
     </plurals>
+
+    <string name="design_subtitle">Design</string>
+    <string name="design_empty_title">No fields yet</string>
+    <string name="design_empty_body">Tap + to add the first field.</string>
+    <string name="design_add_field">Add field</string>
+    <string name="design_edit_field">Edit field</string>
+    <string name="design_type_label">Type</string>
+    <string name="design_name_duplicate">A field with this name already exists</string>
+    <string name="design_delete_title">Delete field \u201c%1$s\u201d?</string>
+    <plurals name="design_delete_body">
+        <item quantity="one">Its value in %1$d record will be permanently deleted.</item>
+        <item quantity="other">Its values in %1$d records will be permanently deleted.</item>
+    </plurals>
+    <plurals name="design_type_change_warning">
+        <item quantity="one">The value in %1$d record will be converted to the new type or removed.</item>
+        <item quantity="other">Values in %1$d records will be converted to the new type or removed.</item>
+    </plurals>
+
+    <string name="field_type_string">Text</string>
+    <string name="field_type_note">Note (long text)</string>
+    <string name="field_type_boolean">Checkbox</string>
+    <string name="field_type_integer">Integer</string>
+    <string name="field_type_float">Decimal number</string>
+    <string name="field_type_date">Date</string>
+    <string name="field_type_time">Time</string>
+    <string name="field_type_list">List</string>
+    <string name="field_type_link">Link</string>
+    <string name="field_type_linked">Linked field</string>
+    <string name="field_type_email">Email</string>
+    <string name="field_type_phone">Phone</string>
+    <string name="field_type_url">Web address</string>
+    <string name="field_type_rating">Rating (1\u20135)</string>
+    <string name="field_type_scale">Scale (0\u201310)</string>
+    <string name="field_type_section">Section header</string>
+    <string name="field_type_created">Created (timestamp)</string>
+    <string name="field_type_modified">Modified (timestamp)</string>
 </resources>
