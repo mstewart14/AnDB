@@ -19,33 +19,36 @@ class RecordRepository(private val databases: DatabaseRepository) {
     suspend fun record(id: String, recordId: Long): Record? =
         databases.read(id) { readRecords(readFields(), recordId).firstOrNull() }
 
-    /** Adds an empty record, assigning its ID fields, and returns its record id. */
-    suspend fun create(id: String): Long = databases.write(id) {
-        val now = databases.clock().toString()
-        execSQL("INSERT INTO record (_created, _modified) VALUES (?, ?)", arrayOf(now, now))
-        val recordId = longQuery("SELECT last_insert_rowid()")
-        assignIds(readFields(), recordId)
-        recordId
-    }
+    /**
+     * Adds a record with [values] and [choices] (as in [save]), assigns its IDs and returns its
+     * record id. Refused if a required field would be empty.
+     */
+    suspend fun insert(id: String, values: Map<Long, Any?>, choices: Map<Long, List<String>>): Long =
+        databases.write(id) {
+            val fields = readFields()
+            checkRequired(fields, values, choices)
+            val now = databases.clock().toString()
+            execSQL("INSERT INTO record (_created, _modified) VALUES (?, ?)", arrayOf(now, now))
+            val recordId = longQuery("SELECT last_insert_rowid()")
+            writeValues(fields, recordId, values, choices, now)
+            assignIds(fields, recordId)
+            recordId
+        }
+
+    /** Adds an empty record; only possible while no field is required. */
+    suspend fun create(id: String): Long = insert(id, emptyMap(), emptyMap())
 
     /**
      * Saves the given values and choices of record [recordId] and updates its modified time. Fields
-     * not given, ID fields and fields that no longer hold values are left alone.
+     * not given, ID fields and fields that no longer hold values are left alone. Refused if a
+     * required field would be empty afterwards.
      */
     suspend fun save(id: String, recordId: Long, values: Map<Long, Any?>, choices: Map<Long, List<String>>) =
         databases.write(id) {
-            val fields = readFields().associateBy { it.id }
-            val columns = values.filterKeys { fieldId ->
-                fields[fieldId]?.let { it.storage != Storage.NONE && it.type != FieldType.ID } == true
-            }
-            val sets = columns.keys.joinToString("") { "${DatabaseFile.columnName(it)} = ?, " }
-            execSQL(
-                "UPDATE record SET ${sets}_modified = ? WHERE _id = ?",
-                (columns.values + databases.clock().toString() + recordId).toTypedArray()
-            )
-            choices.filterKeys { fields[it]?.isMultiList == true }.forEach { (fieldId, chosen) ->
-                writeChoices(fieldId, recordId, chosen)
-            }
+            val fields = readFields()
+            val stored = readRecords(fields, recordId).single()
+            checkRequired(fields, stored.values + values, stored.choices + choices)
+            writeValues(fields, recordId, values, choices, databases.clock().toString())
         }
 
     suspend fun delete(id: String, recordId: Long) = databases.write(id) {
@@ -55,9 +58,14 @@ class RecordRepository(private val databases: DatabaseRepository) {
         execSQL("DELETE FROM record WHERE _id = ?", arrayOf(recordId))
     }
 
-    /** Copies record [recordId] (new IDs and timestamps) and returns the copy's record id. */
+    /**
+     * Copies record [recordId] (new IDs and timestamps) and returns the copy's record id. Refused
+     * if the record lacks a required value, as the copy would too.
+     */
     suspend fun duplicate(id: String, recordId: Long): Long = databases.write(id) {
         val fields = readFields()
+        val source = readRecords(fields, recordId).single()
+        checkRequired(fields, source.values, source.choices)
         val copied = fields.filter { it.storage != Storage.NONE && it.type != FieldType.ID }
             .joinToString("") { ", ${DatabaseFile.columnName(it.id)}" }
         val now = databases.clock().toString()
@@ -89,6 +97,33 @@ class RecordRepository(private val databases: DatabaseRepository) {
             lookup == null -> props.items
             databases.databases.value.orEmpty().none { it.id == lookup.databaseId } -> emptyList()
             else -> databases.distinctValues(lookup.databaseId, lookup.fieldId)
+        }
+    }
+
+    private fun checkRequired(fields: List<FieldDef>, values: Map<Long, Any?>, choices: Map<Long, List<String>>) {
+        val missing = RequiredRule.missing(fields, values, choices)
+        if (missing.isNotEmpty()) throw RequiredFieldsMissingException(missing.map { it.name })
+    }
+
+    /** Writes [values] and [choices] of fields that take them, and sets the modified time. */
+    private fun SQLiteDatabase.writeValues(
+        fields: List<FieldDef>,
+        recordId: Long,
+        values: Map<Long, Any?>,
+        choices: Map<Long, List<String>>,
+        modified: String
+    ) {
+        val byId = fields.associateBy { it.id }
+        val columns = values.filterKeys { fieldId ->
+            byId[fieldId]?.let { it.storage != Storage.NONE && it.type != FieldType.ID } == true
+        }
+        val sets = columns.keys.joinToString("") { "${DatabaseFile.columnName(it)} = ?, " }
+        execSQL(
+            "UPDATE record SET ${sets}_modified = ? WHERE _id = ?",
+            (columns.values + modified + recordId).toTypedArray()
+        )
+        choices.filterKeys { byId[it]?.isMultiList == true }.forEach { (fieldId, chosen) ->
+            writeChoices(fieldId, recordId, chosen)
         }
     }
 

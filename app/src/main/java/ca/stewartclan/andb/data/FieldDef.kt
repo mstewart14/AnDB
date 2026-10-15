@@ -5,7 +5,9 @@ data class FieldDef(
     val position: Int,
     val name: String,
     val type: FieldType,
-    val props: FieldProps = FieldProps.default(type)
+    val props: FieldProps = FieldProps.default(type),
+    /** Records should not be left without a value here; see [FieldType.canBeRequired]. */
+    val required: Boolean = false
 ) {
     /** A List allowing several choices keeps them in a side table instead of a record column. */
     val isMultiList: Boolean get() = (props as? ListProps)?.multiple == true

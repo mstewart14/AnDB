@@ -42,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
+import ca.stewartclan.andb.ui.record.NEW_RECORD_ID
 import ca.stewartclan.andb.ui.theme.AnDbTheme
 import kotlinx.serialization.Serializable
 
@@ -73,7 +74,7 @@ fun RecordListScreen(
         snackbarHostState = snackbarHostState,
         onBack = onBack,
         onOpen = { onOpenRecord(viewModel.databaseId, it) },
-        onNew = { viewModel.create { id -> onOpenRecord(viewModel.databaseId, id) } },
+        onNew = { onOpenRecord(viewModel.databaseId, NEW_RECORD_ID) },
         onEditDesign = { onEditDesign(viewModel.databaseId) }
     )
 }

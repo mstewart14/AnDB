@@ -20,7 +20,16 @@ internal object DatabaseFile {
     /** `PRAGMA application_id`, ASCII "AnDB", marks a SQLite file as ours. */
     const val APPLICATION_ID = 0x416E4442
 
-    const val SCHEMA_VERSION = 1
+    /**
+     * Upgrades, in order: entry `i` takes a file from schema version `i + 1` to `i + 2`. Files are
+     * created at version 1 and brought up to date by these too, so there is one path for both.
+     */
+    private val migrations: List<SQLiteDatabase.() -> Unit> = listOf(
+        // 2: fields can be required.
+        { execSQL("ALTER TABLE andb_field ADD COLUMN required INTEGER NOT NULL DEFAULT 0") }
+    )
+
+    val SCHEMA_VERSION = migrations.size + 1
 
     const val META_NAME = "name"
     const val META_CREATED = "created"
@@ -40,7 +49,16 @@ internal object DatabaseFile {
         val db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
         check(db.applicationId() == APPLICATION_ID) { "Not an AnDB database: ${file.name}" }
         check(db.version <= SCHEMA_VERSION) { "${file.name} was made by a newer AnDB (schema ${db.version})" }
+        migrate(db)
         return db
+    }
+
+    private fun migrate(db: SQLiteDatabase) {
+        if (db.version == SCHEMA_VERSION) return
+        db.transaction {
+            for (from in version until SCHEMA_VERSION) migrations[from - 1]()
+            version = SCHEMA_VERSION
+        }
     }
 
     fun create(file: File, name: String, created: String): SQLiteDatabase {
@@ -62,8 +80,9 @@ internal object DatabaseFile {
             execSQL("CREATE TABLE record ($SYSTEM_COLUMNS_DDL)")
             setMeta(META_NAME, name)
             setMeta(META_CREATED, created)
-            version = SCHEMA_VERSION
+            version = 1
         }
+        migrate(db)
         return db
     }
 
@@ -124,12 +143,13 @@ internal fun SQLiteDatabase.deleteMeta(key: String) {
 }
 
 internal fun SQLiteDatabase.readFields(): List<FieldDef> =
-    rawQuery("SELECT id, position, name, type, props FROM andb_field ORDER BY position", null).use { c ->
+    rawQuery("SELECT id, position, name, type, props, required FROM andb_field ORDER BY position", null).use { c ->
         val id = c.getColumnIndexOrThrow("id")
         val position = c.getColumnIndexOrThrow("position")
         val name = c.getColumnIndexOrThrow("name")
         val type = c.getColumnIndexOrThrow("type")
         val props = c.getColumnIndexOrThrow("props")
+        val required = c.getColumnIndexOrThrow("required")
         buildList {
             while (c.moveToNext()) {
                 val fieldType = FieldType.fromCode(c.getString(type))
@@ -139,7 +159,8 @@ internal fun SQLiteDatabase.readFields(): List<FieldDef> =
                         c.getInt(position),
                         c.getString(name),
                         fieldType,
-                        FieldProps.decode(fieldType, c.getString(props))
+                        FieldProps.decode(fieldType, c.getString(props)),
+                        c.getInt(required) != 0
                     )
                 )
             }

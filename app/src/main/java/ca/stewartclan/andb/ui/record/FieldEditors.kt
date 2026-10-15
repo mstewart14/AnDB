@@ -3,7 +3,9 @@ package ca.stewartclan.andb.ui.record
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
@@ -35,9 +39,30 @@ class EditorContext(
     val onToggleChoice: (FieldDef, String) -> Unit
 )
 
-/** The input for one field of the record, chosen by its type. */
+/**
+ * The input for one field of the record. Required fields are marked in their label; empty ones
+ * are pointed out once the user has tried to move on without them.
+ */
 @Composable
 fun FieldEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier = Modifier) {
+    val labelled = if (field.required) field.copy(name = "${field.name} *") else field
+    val missing = ctx.state.showMissing && ctx.state.missing.any { it.id == field.id }
+    Column(modifier) {
+        TypedEditor(labelled, ctx, Modifier)
+        if (missing) {
+            Text(
+                stringResource(R.string.record_required),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+            )
+        }
+    }
+}
+
+/** The input for [field], chosen by its type. */
+@Composable
+private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val text = ctx.state.drafts[field.id].orEmpty()
     when (field.type) {
         FieldType.SECTION, FieldType.ID, FieldType.CREATED, FieldType.MODIFIED -> ReadOnlyEditor(field, ctx, modifier)

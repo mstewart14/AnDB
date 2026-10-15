@@ -108,7 +108,7 @@ class DatabaseRepositoryTest {
         val b = repository.addField(id, "B", FieldType.STRING)
         val c = repository.addField(id, "C", FieldType.STRING)
 
-        repository.updateField(id, b.id, "Bee", FieldType.STRING, NoProps)
+        repository.updateField(id, FieldDef(b.id, 0, "Bee", FieldType.STRING, NoProps))
         repository.moveField(id, c.id, 0)
 
         val fields = repository.fields(id)
@@ -144,8 +144,8 @@ class DatabaseRepositoryTest {
         val note = repository.addField(id, "Note", FieldType.STRING)
         insertRecord(id, "f${pages.id}" to "412", "f${note.id}" to "Signed")
 
-        repository.updateField(id, pages.id, "Pages", FieldType.INTEGER, NoProps)
-        repository.updateField(id, note.id, "Note", FieldType.NOTE, NoProps)
+        repository.updateField(id, FieldDef(pages.id, 0, "Pages", FieldType.INTEGER, NoProps))
+        repository.updateField(id, FieldDef(note.id, 0, "Note", FieldType.NOTE, NoProps))
 
         assertEquals(listOf(FieldType.INTEGER, FieldType.NOTE), repository.fields(id).map { it.type })
         assertEquals("INTEGER", recordColumns(id).toMap()["f${pages.id}"])
@@ -165,10 +165,10 @@ class DatabaseRepositoryTest {
         val f = repository.addField(id, "Details", FieldType.SECTION)
         assertEquals(3, recordColumns(id).size)
 
-        repository.updateField(id, f.id, "Details", FieldType.STRING, NoProps)
+        repository.updateField(id, FieldDef(f.id, 0, "Details", FieldType.STRING, NoProps))
         assertEquals("TEXT", recordColumns(id).toMap()["f${f.id}"])
 
-        repository.updateField(id, f.id, "Details", FieldType.SECTION, NoProps)
+        repository.updateField(id, FieldDef(f.id, 0, "Details", FieldType.SECTION, NoProps))
         assertEquals(3, recordColumns(id).size)
     }
 
@@ -202,9 +202,9 @@ class DatabaseRepositoryTest {
         val f = repository.addField(id, "No.", FieldType.ID)
         records.create(id)
 
-        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 500))
+        repository.updateField(id, FieldDef(f.id, 0, "No.", FieldType.ID, IdProps(start = 500)))
         assertEquals("500", value(id, "f${f.id}", records.create(id)))
-        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 1))
+        repository.updateField(id, FieldDef(f.id, 0, "No.", FieldType.ID, IdProps(start = 1)))
         assertEquals("501", value(id, "f${f.id}", records.create(id)))
     }
 
@@ -227,7 +227,7 @@ class DatabaseRepositoryTest {
         val f = repository.addField(id, "No.", FieldType.ID)
         repeat(3) { records.create(id) }
 
-        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(IdKind.SHORT_CODE))
+        repository.updateField(id, FieldDef(f.id, 0, "No.", FieldType.ID, IdProps(IdKind.SHORT_CODE)))
 
         val codes = column(id, "f${f.id}")
         assertEquals(3, codes.toSet().size)
@@ -242,7 +242,7 @@ class DatabaseRepositoryTest {
         insertRecord(id, "f${f.id}" to "same")
         insertRecord(id, "f${f.id}" to "same")
 
-        repository.updateField(id, f.id, "Code", FieldType.ID, IdProps())
+        repository.updateField(id, FieldDef(f.id, 0, "Code", FieldType.ID, IdProps()))
 
         assertEquals(listOf("1", "2"), column(id, "f${f.id}"))
     }
@@ -268,7 +268,7 @@ class DatabaseRepositoryTest {
         val f = repository.addField(id, "No.", FieldType.ID)
         records.create(id)
 
-        repository.updateField(id, f.id, "No.", FieldType.INTEGER, NoProps)
+        repository.updateField(id, FieldDef(f.id, 0, "No.", FieldType.INTEGER, NoProps))
 
         assertEquals(0L, indexCount(id, "u_f${f.id}"))
         assertEquals(0L, metaCount(id, "next_id.${f.id}"))
@@ -283,7 +283,10 @@ class DatabaseRepositoryTest {
         insertRecord(id, "f${f.id}" to "")
         insertRecord(id, "f${f.id}" to "History")
 
-        repository.updateField(id, f.id, "Genre", FieldType.LIST, ListProps(listOf("Fiction", "History"), true))
+        repository.updateField(
+            id,
+            FieldDef(f.id, 0, "Genre", FieldType.LIST, ListProps(listOf("Fiction", "History"), true))
+        )
 
         assertEquals(3, recordColumns(id).size)
         assertEquals(listOf("1:Fiction", "3:History"), listRows(id, f.id))
@@ -300,7 +303,7 @@ class DatabaseRepositoryTest {
             db.execSQL("INSERT INTO list_f${f.id} VALUES ($r1, 'B'), ($r1, 'A'), ($r2, 'A')")
         }
 
-        repository.updateField(id, f.id, "Genre", FieldType.LIST, ListProps(listOf("A", "B")))
+        repository.updateField(id, FieldDef(f.id, 0, "Genre", FieldType.LIST, ListProps(listOf("A", "B"))))
 
         assertEquals(listOf("B", "A", null), column(id, "f${f.id}"))
         assertEquals(0L, tableCount(id, "list_f${f.id}"))
@@ -314,7 +317,7 @@ class DatabaseRepositoryTest {
         records.create(id)
         assertEquals(1L, tableCount(id, "list_f${a.id}"))
 
-        repository.updateField(id, a.id, "A", FieldType.ID, IdProps())
+        repository.updateField(id, FieldDef(a.id, 0, "A", FieldType.ID, IdProps()))
         repository.deleteField(id, b.id)
 
         assertEquals(listOf("1"), column(id, "f${a.id}"))
@@ -343,6 +346,54 @@ class DatabaseRepositoryTest {
         assertEquals(listOf("B-001", "B-002", "B-003"), repository.distinctValues(id, no.id))
         assertEquals(emptyList<String>(), repository.distinctValues(id, section.id))
         assertEquals(emptyList<String>(), repository.distinctValues(id, 999))
+    }
+
+    @Test
+    fun versionOneFileIsUpgradedOnOpen() = runBlocking {
+        dir.mkdirs()
+        val id = "00000000-0000-4000-8000-000000000001"
+        // The schema as AnDB 0.1 wrote it, before fields could be required.
+        SQLiteDatabase.openOrCreateDatabase(File(dir, "$id.db"), null).use { db ->
+            db.execSQL("PRAGMA application_id = ${DatabaseFile.APPLICATION_ID}")
+            db.execSQL("CREATE TABLE andb_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            db.execSQL(
+                "CREATE TABLE andb_field (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
+                    "type TEXT NOT NULL, props TEXT NOT NULL DEFAULT '{}')"
+            )
+            db.execSQL("CREATE TABLE record (${DatabaseFile.SYSTEM_COLUMNS_DDL})")
+            db.execSQL("INSERT INTO andb_meta VALUES ('name', 'Old')")
+            db.execSQL("INSERT INTO andb_field (position, name, type) VALUES (0, 'Title', 'string')")
+            db.version = 1
+        }
+
+        repository.refresh()
+
+        assertEquals(listOf("Old"), repository.databases.value!!.map { it.name })
+        assertEquals(listOf(FieldDef(1, 0, "Title", FieldType.STRING)), repository.fields(id))
+        assertEquals(DatabaseFile.SCHEMA_VERSION, openRaw(id).use { it.version })
+    }
+
+    @Test
+    fun newerSchemaIsRefused() = runBlocking {
+        val id = repository.create("Future")
+        openRaw(id).use { it.version = DatabaseFile.SCHEMA_VERSION + 1 }
+
+        repository.refresh()
+
+        assertTrue(repository.databases.value!!.isEmpty())
+    }
+
+    @Test
+    fun requiredIsStoredOnlyForTypesThatCanBeRequired() = runBlocking {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING, required = true)
+        val read = repository.addField(id, "Read", FieldType.BOOLEAN, required = true)
+
+        assertEquals(listOf(true, false), repository.fields(id).map { it.required })
+
+        repository.updateField(id, FieldDef(title.id, 0, "Title", FieldType.SECTION, NoProps, required = true))
+        repository.updateField(id, FieldDef(read.id, 0, "Read", FieldType.STRING, NoProps, required = true))
+        assertEquals(listOf(false, true), repository.fields(id).map { it.required })
     }
 
     private fun listRows(id: String, fieldId: Long): List<String> = openRaw(id).use { db ->

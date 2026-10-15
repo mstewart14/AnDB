@@ -1,6 +1,7 @@
 package ca.stewartclan.andb.ui.design
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -13,17 +14,21 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.DatabaseSummary
@@ -53,27 +58,15 @@ fun FieldDialog(
     recordCount: Long,
     lookup: LookupContext,
     check: (String) -> NameProblem,
-    onConfirm: (String, FieldType, FieldProps) -> Unit,
+    /** Gets the field as entered: name, type, settings and required (id and position unset). */
+    onConfirm: (FieldDef) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by rememberNameState(field?.name.orEmpty())
-    var type by rememberSaveable { mutableStateOf(field?.type ?: FieldType.STRING) }
-    var idDraft by rememberSaveable(stateSaver = IdDraft.Saver) {
-        mutableStateOf(IdDraft.of(field?.props as? IdProps ?: IdProps()))
-    }
-    var listDraft by rememberSaveable(stateSaver = ListDraft.Saver) {
-        mutableStateOf((field?.props as? ListProps)?.let(ListDraft::of) ?: ListDraft())
-    }
-    val problem = check(name.text)
-    // Null while a setting is invalid, which disables the confirm button.
-    val props: FieldProps? = when (type) {
-        FieldType.ID -> idDraft.toProps()
-        FieldType.LIST -> listDraft.toProps()
-        else -> FieldProps.default(type)
-    }
-    val settingsModifier = Modifier.padding(top = 8.dp)
-    val canConfirm = problem == NameProblem.OK && props != null
-    val confirm = { if (problem == NameProblem.OK) props?.let { onConfirm(name.text, type, it) } }
+    val draft = rememberFieldDraft(field)
+    val problem = check(draft.name.text)
+    val entered = draft.toField()
+    val canConfirm = problem == NameProblem.OK && entered != null
+    val confirm = { if (canConfirm && entered != null) onConfirm(entered) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -81,22 +74,17 @@ fun FieldDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 NameField(
-                    value = name,
-                    onValueChange = { name = it },
+                    value = draft.name,
+                    onValueChange = { draft.name = it },
                     problem = problem,
                     duplicateMessage = stringResource(R.string.design_name_duplicate),
                     onDone = confirm,
                     modifier = Modifier.fillMaxWidth()
                 )
-                TypePicker(type, onTypeChange = { type = it }, modifier = Modifier.padding(top = 8.dp))
-                when (type) {
-                    FieldType.ID -> IdPropsEditor(idDraft, { idDraft = it }, settingsModifier)
-                    FieldType.LIST -> ListPropsEditor(listDraft, {
-                        listDraft = it
-                    }, lookup, field?.id, settingsModifier)
-                    else -> Unit
-                }
-                ChangeWarning(field, FieldDef(0, 0, "", type, props ?: FieldProps.default(type)), recordCount)
+                TypePicker(draft.type, onTypeChange = { draft.type = it }, modifier = Modifier.padding(top = 8.dp))
+                FieldSettings(draft, lookup, field?.id, Modifier.padding(top = 8.dp))
+                val type = draft.type
+                ChangeWarning(field, entered ?: FieldDef(0, 0, "", type, FieldProps.default(type)), recordCount)
             }
         },
         confirmButton = {
@@ -106,6 +94,61 @@ fun FieldDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
     )
+}
+
+/** The field being entered in [FieldDialog]; each part survives rotation. */
+class FieldDraft(
+    name: MutableState<TextFieldValue>,
+    type: MutableState<FieldType>,
+    idDraft: MutableState<IdDraft>,
+    listDraft: MutableState<ListDraft>,
+    required: MutableState<Boolean>
+) {
+    var name by name
+    var type by type
+    var idDraft by idDraft
+    var listDraft by listDraft
+    var required by required
+
+    /** The field as entered (id and position unset), or null while a setting is invalid. */
+    fun toField(): FieldDef? {
+        val props = when (type) {
+            FieldType.ID -> idDraft.toProps()
+            FieldType.LIST -> listDraft.toProps()
+            else -> FieldProps.default(type)
+        }
+        return props?.let { FieldDef(0, 0, name.text, type, it, required && type.canBeRequired) }
+    }
+}
+
+@Composable
+private fun rememberFieldDraft(field: FieldDef?): FieldDraft {
+    val name = rememberNameState(field?.name.orEmpty())
+    val type = rememberSaveable { mutableStateOf(field?.type ?: FieldType.STRING) }
+    val idDraft = rememberSaveable(stateSaver = IdDraft.Saver) {
+        mutableStateOf(IdDraft.of(field?.props as? IdProps ?: IdProps()))
+    }
+    val listDraft = rememberSaveable(stateSaver = ListDraft.Saver) {
+        mutableStateOf((field?.props as? ListProps)?.let(ListDraft::of) ?: ListDraft())
+    }
+    val required = rememberSaveable { mutableStateOf(field?.required ?: false) }
+    return remember { FieldDraft(name, type, idDraft, listDraft, required) }
+}
+
+/** The settings of the draft's type, and the Required switch where it applies. */
+@Composable
+private fun FieldSettings(draft: FieldDraft, lookup: LookupContext, editingFieldId: Long?, modifier: Modifier) {
+    when (draft.type) {
+        FieldType.ID -> IdPropsEditor(draft.idDraft, { draft.idDraft = it }, modifier)
+        FieldType.LIST -> ListPropsEditor(draft.listDraft, { draft.listDraft = it }, lookup, editingFieldId, modifier)
+        else -> Unit
+    }
+    if (draft.type.canBeRequired) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.design_required), modifier = Modifier.weight(1f))
+            Switch(checked = draft.required, onCheckedChange = { draft.required = it })
+        }
+    }
 }
 
 /** Explains what saving [new] over [old] does to the values already in [recordCount] records. */

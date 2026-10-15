@@ -101,14 +101,8 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
             recordCount = recordCount,
             lookup = lookupContext,
             check = { viewModel.checkName(it, editing = editing) },
-            onConfirm = { name, type, props ->
-                if (editing ==
-                    null
-                ) {
-                    viewModel.addField(name, type, props)
-                } else {
-                    viewModel.updateField(editing, name, type, props)
-                }
+            onConfirm = { entered ->
+                if (editing == null) viewModel.addField(entered) else viewModel.updateField(editing, entered)
                 editId = null
             },
             onDismiss = { editId = null }
@@ -265,6 +259,7 @@ private fun fieldSummary(field: FieldDef, databaseNames: Map<String, String>): S
         }
         NoProps -> Unit
     }
+    if (field.required) parts += stringResource(R.string.design_summary_required)
     return parts.joinToString(" · ")
 }
 

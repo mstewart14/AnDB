@@ -71,16 +71,18 @@ class DatabaseRepository(
         id: String,
         name: String,
         type: FieldType,
-        props: FieldProps = FieldProps.default(type)
+        props: FieldProps = FieldProps.default(type),
+        required: Boolean = false
     ): FieldDef = mutate {
         withDatabase(id) {
             transaction {
                 val position = longQuery("SELECT COALESCE(MAX(position) + 1, 0) FROM andb_field").toInt()
+                val isRequired = required && type.canBeRequired
                 execSQL(
-                    "INSERT INTO andb_field (position, name, type, props) VALUES (?, ?, ?, ?)",
-                    arrayOf(position, name, type.code, FieldProps.encode(props))
+                    "INSERT INTO andb_field (position, name, type, props, required) VALUES (?, ?, ?, ?, ?)",
+                    arrayOf(position, name, type.code, FieldProps.encode(props), if (isRequired) 1 else 0)
                 )
-                val field = FieldDef(longQuery("SELECT last_insert_rowid()"), position, name, type, props)
+                val field = FieldDef(longQuery("SELECT last_insert_rowid()"), position, name, type, props, isRequired)
                 addColumn(field, idGenerator)
                 field
             }
@@ -88,26 +90,28 @@ class DatabaseRepository(
     }
 
     /**
-     * Changes a field's name, type and settings. When the storage class changes, values are
+     * Changes field [FieldDef.id]'s name, type, settings and required flag to [field]'s (its
+     * position is ignored; see [moveField]). When the storage class changes, values are
      * converted with SQL `CAST` (so text that isn't a number becomes 0), or dropped when the new
      * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID. A List
      * switched to multiple choices keeps each value as a choice; switched back, it keeps the first.
      */
-    suspend fun updateField(id: String, fieldId: Long, name: String, type: FieldType, props: FieldProps) = mutate {
+    suspend fun updateField(id: String, field: FieldDef) = mutate {
         withDatabase(id) {
             transaction {
                 val fields = readFields()
-                val old = fields.first { it.id == fieldId }
-                val new = old.copy(name = name, type = type, props = props)
+                val old = fields.first { it.id == field.id }
+                val new = field.copy(position = old.position, required = field.required && field.type.canBeRequired)
+                val type = new.type
                 execSQL(
-                    "UPDATE andb_field SET name = ?, type = ?, props = ? WHERE id = ?",
-                    arrayOf(name, type.code, FieldProps.encode(props), fieldId)
+                    "UPDATE andb_field SET name = ?, type = ?, props = ?, required = ? WHERE id = ?",
+                    arrayOf(new.name, type.code, FieldProps.encode(new.props), if (new.required) 1 else 0, new.id)
                 )
                 if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
                 if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
                 if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
                 if (type == FieldType.ID) updateIds(old, new, idGenerator)
-                if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(fieldId))
+                if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(new.id))
             }
         }
     }

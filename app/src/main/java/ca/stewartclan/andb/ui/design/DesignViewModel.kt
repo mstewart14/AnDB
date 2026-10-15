@@ -10,8 +10,6 @@ import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
-import ca.stewartclan.andb.data.FieldProps
-import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
 import ca.stewartclan.andb.ui.common.ReportingViewModel
@@ -51,14 +49,15 @@ class DesignViewModel(private val repository: DatabaseRepository, val databaseId
     fun checkName(name: String, editing: FieldDef? = null): NameProblem =
         NameValidator.check(name, fields.value.orEmpty().map { it.name }, editing?.name)
 
-    fun addField(name: String, type: FieldType, props: FieldProps) = change {
-        repository.addField(databaseId, name.trim(), type, props)
+    /** Adds [entered] (its id and position are ignored) after the existing fields. */
+    fun addField(entered: FieldDef) = change {
+        repository.addField(databaseId, entered.name.trim(), entered.type, entered.props, entered.required)
     }
 
-    fun updateField(field: FieldDef, name: String, type: FieldType, props: FieldProps) = change {
-        if (name.trim() != field.name || type != field.type || props != field.props) {
-            repository.updateField(databaseId, field.id, name.trim(), type, props)
-        }
+    /** Saves [entered] over [field], if anything changed. */
+    fun updateField(field: FieldDef, entered: FieldDef) = change {
+        val new = entered.copy(id = field.id, position = field.position, name = entered.name.trim())
+        if (new != field) repository.updateField(databaseId, new)
     }
 
     /** Moves [field] [by] places in display order (negative is up). */

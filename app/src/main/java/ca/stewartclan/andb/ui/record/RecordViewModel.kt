@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.record
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.createSavedStateHandle
@@ -15,6 +16,7 @@ import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.ui.common.ReportingViewModel
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,6 +26,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The record on screen with its unsaved edits. */
 data class RecordUiState(
@@ -37,9 +41,27 @@ data class RecordUiState(
     val chosen: Map<Long, List<String>>,
     /** What each List field offers, by field id. */
     val listChoices: Map<Long, List<String>>,
-    val dirty: Boolean = false
+    val dirty: Boolean = false,
+    /** Whether to point out empty required fields, after an attempt to move on without them. */
+    val showMissing: Boolean = false
 ) {
-    val index: Int get() = recordIds.indexOf(record.id)
+    /** A record being entered, not stored until it's saved with its required fields filled. */
+    val isNew: Boolean get() = record.id == NEW_RECORD_ID
+
+    /** Position in [recordIds]; a new record comes after the last. */
+    val index: Int get() = if (isNew) recordIds.size else recordIds.indexOf(record.id)
+
+    /** Required fields still empty. */
+    val missing: List<FieldDef> get() = RequiredFields.missing(fields, drafts, chosen)
+
+    /** Nothing entered at all, as in a record added by mistake. */
+    val isBlank: Boolean get() = RequiredFields.isBlank(fields, drafts, chosen)
+
+    /** Edits not yet stored. A new record with nothing entered has none worth keeping. */
+    val hasUnsavedInput: Boolean get() = dirty && !(isNew && isBlank)
+
+    /** Leaving now would lose edits, as they can't be saved until required fields are filled. */
+    val wouldLoseEdits: Boolean get() = hasUnsavedInput && missing.isNotEmpty()
 }
 
 class RecordViewModel(
@@ -69,6 +91,9 @@ class RecordViewModel(
     /** Set when there's no record left to show (the last one was deleted). */
     val finished: StateFlow<Boolean> = _finished.asStateFlow()
 
+    /** One save at a time, so a new record's first save finishes (and gets its id) before the next. */
+    private val saveLock = Mutex()
+
     init {
         launchReporting { load(savedState[KEY_RECORD] ?: startRecordId) }
     }
@@ -87,56 +112,111 @@ class RecordViewModel(
         it?.copy(chosen = it.chosen + (field.id to updated), dirty = true)
     }
 
-    /** Saves, then shows the record [by] places away in browsing order. */
+    /**
+     * Saves, then shows the record [by] places away in browsing order. If the edits can't be saved
+     * yet, stays and points out the empty required fields.
+     */
     fun go(by: Int) {
         val state = _state.value ?: return
         val target = state.recordIds.getOrNull(state.index + by) ?: return
-        launchReporting {
-            saveNow()
-            load(target)
-        }
+        launchReporting { if (save()) load(target) else showMissing() }
+    }
+
+    /** Saves and starts a new record; if the edits can't be saved yet, points out what's missing. */
+    fun newRecord() {
+        val state = _state.value ?: return
+        if (state.isNew && state.isBlank) return
+        launchReporting { if (save()) load(NEW_RECORD_ID) else showMissing() }
+    }
+
+    /** Drops unsaved edits: back to the record as stored, or to a blank new record. */
+    fun revert() = _state.update { state ->
+        state?.copy(
+            drafts = state.record.values.mapValues { (_, v) -> FieldValues.toDraft(v) },
+            chosen = state.record.choices,
+            dirty = false,
+            showMissing = false
+        )
     }
 
     fun duplicate() = launchReporting {
-        saveNow()
-        val shown = _state.value ?: return@launchReporting
+        if (!save()) {
+            showMissing()
+            return@launchReporting
+        }
+        val shown = _state.value?.takeUnless { it.isNew } ?: return@launchReporting
         load(records.duplicate(databaseId, shown.record.id))
     }
 
-    /** Deletes the shown record and shows the next one, or the previous if it was the last. */
+    /**
+     * Deletes the shown record and shows the next one, or the previous if it was the last. A new
+     * record was never stored, so it's just dropped.
+     */
     fun delete() = launchReporting {
         val shown = _state.value ?: return@launchReporting
+        if (shown.isNew) {
+            revert()
+            _finished.value = true
+            return@launchReporting
+        }
         records.delete(databaseId, shown.record.id)
         val next = shown.recordIds.getOrNull(shown.index + 1) ?: shown.recordIds.getOrNull(shown.index - 1)
         if (next == null) _finished.value = true else load(next)
     }
 
-    /** Saves unsaved edits in the background; for leaving the screen or the app. */
+    /**
+     * Saves in the background, for leaving the screen or the app. Edits that can't be saved yet
+     * stay on screen, unsaved.
+     */
     fun saveInBackground() {
-        val edits = takeEdits() ?: return
-        appScope.launch { edits.save() }
+        appScope.launch {
+            try {
+                save()
+            } catch (
+                @Suppress("TooGenericExceptionCaught") e: Exception
+            ) {
+                Log.e(TAG, "Background save failed", e)
+            }
+        }
     }
 
-    private suspend fun saveNow() {
-        takeEdits()?.save()
-    }
+    private fun showMissing() = _state.update { it?.copy(showMissing = true) }
 
-    private class Edits(val recordId: Long, val values: Map<Long, Any?>, val chosen: Map<Long, List<String>>)
-
-    private suspend fun Edits.save() = records.save(databaseId, recordId, values, chosen)
-
-    /** The shown record's unsaved edits, now marked saved; null if there are none. */
-    private fun takeEdits(): Edits? {
-        val state = _state.value?.takeIf { it.dirty } ?: return null
-        _state.value = state.copy(dirty = false)
-        val values = state.fields.filter { it.id in state.drafts }
-            .associate { it.id to FieldValues.fromDraft(it, state.drafts.getValue(it.id)) }
-        return Edits(state.record.id, values, state.chosen)
+    /**
+     * Stores the shown record's edits: inserts a new record or updates a stored one. Returns false,
+     * storing nothing, while required fields are empty. A new record with nothing entered isn't
+     * stored at all.
+     */
+    private suspend fun save(): Boolean = saveLock.withLock {
+        val state = _state.value?.takeIf { it.hasUnsavedInput } ?: return true
+        if (state.missing.isNotEmpty()) return false
+        val values = RequiredFields.values(state.fields, state.drafts)
+        val recordId = if (state.isNew) {
+            records.insert(databaseId, values, state.chosen).also { savedState[KEY_RECORD] = it }
+        } else {
+            records.save(databaseId, state.record.id, values, state.chosen)
+            state.record.id
+        }
+        val stored = records.record(databaseId, recordId) ?: return true
+        _state.update { current ->
+            current?.copy(
+                record = stored,
+                recordIds = if (state.isNew) current.recordIds + recordId else current.recordIds,
+                // Edits made while saving are still unsaved.
+                dirty = current.drafts != state.drafts || current.chosen != state.chosen
+            )
+        }
+        true
     }
 
     private suspend fun load(recordId: Long) {
         val fields = repository.fields(databaseId)
-        val record = records.record(databaseId, recordId)
+        val record = if (recordId == NEW_RECORD_ID) {
+            val now = Instant.now().toString()
+            Record(NEW_RECORD_ID, now, now, emptyMap(), emptyMap())
+        } else {
+            records.record(databaseId, recordId)
+        }
         if (record == null) {
             _finished.value = true
             return
@@ -161,6 +241,7 @@ class RecordViewModel(
     companion object {
         private const val KEY_LOCKED = "locked"
         private const val KEY_RECORD = "shownRecord"
+        private const val TAG = "RecordViewModel"
 
         val Factory = viewModelFactory {
             initializer {

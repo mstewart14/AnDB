@@ -45,6 +45,8 @@
     <string name="design_edit_field">Edit field</string>
     <string name="design_type_label">Type</string>
     <string name="design_drag_handle">Drag to reorder</string>
+    <string name="design_required">Required</string>
+    <string name="design_summary_required">required</string>
     <string name="design_name_duplicate">A field with this name already exists</string>
     <string name="design_delete_title">Delete field \u201c%1$s\u201d?</string>
     <plurals name="design_delete_body">
@@ -137,6 +139,13 @@
     <string name="record_clear">Clear</string>
     <string name="record_none">(none)</string>
     <string name="record_open_value">Open</string>
+    <string name="record_required">Required</string>
+    <string name="record_fill_required">Fill in the required fields to add another record.</string>
+    <string name="record_required_title">Required fields are empty</string>
+    <string name="record_required_body">Not filled in yet: %1$s. Your changes can\u2019t be saved until they are.</string>
+    <string name="record_keep_editing">Keep editing</string>
+    <string name="record_discard">Discard changes</string>
+    <string name="record_new">New record</string>
     <plurals name="record_rating_star">
         <item quantity="one">%1$d star</item>
         <item quantity="other">%1$d stars</item>

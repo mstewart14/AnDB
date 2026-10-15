@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Lock
@@ -54,9 +55,12 @@ import ca.stewartclan.andb.R
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
 import kotlinx.serialization.Serializable
 
-/** Navigation route for one record of a database. */
+/** Navigation route for one record of a database; [NEW_RECORD_ID] starts a new one. */
 @Serializable
 data class RecordRoute(val databaseId: String, val recordId: Long)
+
+/** Record id of a record being entered and not yet stored. Stored records' ids start at 1. */
+const val NEW_RECORD_ID = 0L
 
 @Composable
 fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory)) {
@@ -68,12 +72,20 @@ fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(fact
     val snackbarHostState = remember { SnackbarHostState() }
     ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    // Where the user asked to go while required fields were empty: BACK, or -1/+1 for previous/next.
+    var pendingLeave by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    val leave = {
-        viewModel.saveInBackground()
-        onBack()
+    val goNow = { by: Int ->
+        if (by == BACK) {
+            viewModel.saveInBackground()
+            onBack()
+        } else {
+            viewModel.go(by)
+        }
     }
-    BackHandler(onBack = leave)
+    // Leaving when edits can't be saved (required fields empty) asks first.
+    val go = { by: Int -> if (state?.wouldLoseEdits == true) pendingLeave = by else goNow(by) }
+    BackHandler { go(BACK) }
     // Switching apps or turning the screen off saves too.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.saveInBackground() }
     LaunchedEffect(finished) { if (finished) onBack() }
@@ -83,31 +95,79 @@ fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(fact
         state = state,
         locked = locked,
         snackbarHostState = snackbarHostState,
-        onBack = leave,
-        onLockedChange = viewModel::setLocked,
-        onGo = viewModel::go,
-        onDuplicate = { viewModel.duplicate() },
-        onDelete = { confirmDelete = true },
+        actions = RecordActions(
+            onBack = { go(BACK) },
+            onLockedChange = viewModel::setLocked,
+            onGo = go,
+            onNew = viewModel::newRecord,
+            onDuplicate = { viewModel.duplicate() },
+            onDelete = { confirmDelete = true }
+        ),
         editor = { state ->
             EditorContext(state, readOnly = locked, onEdit = viewModel::edit, onToggleChoice = viewModel::toggleChoice)
         }
     )
 
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text(stringResource(R.string.record_delete_title)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.delete()
-                    confirmDelete = false
-                }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
+    if (confirmDelete) DeleteRecordDialog(onConfirm = { viewModel.delete() }, onClose = { confirmDelete = false })
+    pendingLeave?.let { leaving ->
+        state?.let {
+            RequiredLeaveDialog(
+                it,
+                onDiscard = {
+                    pendingLeave = null
+                    viewModel.revert()
+                    goNow(leaving)
+                },
+                onDone = { pendingLeave = null }
+            )
+        }
     }
+}
+
+/** What the record screen's buttons do. */
+private class RecordActions(
+    val onBack: () -> Unit,
+    val onLockedChange: (Boolean) -> Unit,
+    val onGo: (Int) -> Unit,
+    val onNew: () -> Unit,
+    val onDuplicate: () -> Unit,
+    val onDelete: () -> Unit
+)
+
+/** [onConfirm] deletes; [onClose] closes the dialog, after either button. */
+@Composable
+private fun DeleteRecordDialog(onConfirm: () -> Unit, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.record_delete_title)) },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm()
+                onClose()
+            }) {
+                Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.action_cancel)) } }
+    )
+}
+
+/** Asks before leaving a record whose edits can't be saved because required fields are empty. */
+@Composable
+private fun RequiredLeaveDialog(state: RecordUiState, onDiscard: () -> Unit, onDone: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(stringResource(R.string.record_required_title)) },
+        text = {
+            Text(stringResource(R.string.record_required_body, state.missing.joinToString(", ") { it.name }))
+        },
+        confirmButton = {
+            TextButton(onClick = onDiscard) {
+                Text(stringResource(R.string.record_discard), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text(stringResource(R.string.record_keep_editing)) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,68 +177,78 @@ private fun RecordContent(
     state: RecordUiState?,
     locked: Boolean,
     snackbarHostState: SnackbarHostState,
-    onBack: () -> Unit,
-    onLockedChange: (Boolean) -> Unit,
-    onGo: (Int) -> Unit,
-    onDuplicate: () -> Unit,
-    onDelete: () -> Unit,
+    actions: RecordActions,
     editor: (RecordUiState) -> EditorContext
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                actions = {
-                    IconToggleButton(checked = locked, onCheckedChange = onLockedChange) {
-                        Icon(
-                            if (locked) Icons.Filled.Lock else Icons.Outlined.Lock,
-                            contentDescription = stringResource(R.string.record_protect)
-                        )
-                    }
-                    RecordMenu(onDuplicate, onDelete)
-                }
-            )
-        },
-        bottomBar = { if (state != null) PrevNextBar(state, onGo) },
+        topBar = { RecordTopBar(title, locked, actions) },
+        bottomBar = { if (state != null) PrevNextBar(state, actions.onGo) },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        if (state == null) return@Scaffold
-        val swipeDistance = with(LocalDensity.current) { SWIPE_DISTANCE.toPx() }
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .pointerInput(state.record.id) {
-                    var total = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { total = 0f },
-                        onHorizontalDrag = { _, dx -> total += dx },
-                        onDragEnd = {
-                            when {
-                                total <= -swipeDistance -> onGo(1)
-                                total >= swipeDistance -> onGo(-1)
-                            }
-                        }
-                    )
-                }
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            if (state.fields.isEmpty()) {
-                Text(stringResource(R.string.record_no_fields), style = MaterialTheme.typography.bodyMedium)
+        if (state != null) RecordForm(state, editor(state), actions.onGo, Modifier.padding(innerPadding))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecordTopBar(title: String, locked: Boolean, actions: RecordActions) {
+    TopAppBar(
+        title = { Text(title) },
+        navigationIcon = {
+            IconButton(onClick = actions.onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
             }
-            val ctx = editor(state)
-            state.fields.forEach { field -> FieldEditor(field, ctx) }
+        },
+        actions = {
+            IconButton(onClick = actions.onNew) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.list_new_record))
+            }
+            IconToggleButton(checked = locked, onCheckedChange = actions.onLockedChange) {
+                Icon(
+                    if (locked) Icons.Filled.Lock else Icons.Outlined.Lock,
+                    contentDescription = stringResource(R.string.record_protect)
+                )
+            }
+            RecordMenu(actions.onDuplicate, actions.onDelete)
         }
+    )
+}
+
+/** All the record's fields, scrolling; swiping sideways calls [onGo] with +1 (next) or -1. */
+@Composable
+private fun RecordForm(state: RecordUiState, ctx: EditorContext, onGo: (Int) -> Unit, modifier: Modifier) {
+    val swipeDistance = with(LocalDensity.current) { SWIPE_DISTANCE.toPx() }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(state.record.id) {
+                var total = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { total = 0f },
+                    onHorizontalDrag = { _, dx -> total += dx },
+                    onDragEnd = {
+                        when {
+                            total <= -swipeDistance -> onGo(1)
+                            total >= swipeDistance -> onGo(-1)
+                        }
+                    }
+                )
+            }
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        if (state.showMissing && state.missing.isNotEmpty()) {
+            Text(
+                stringResource(R.string.record_fill_required),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        if (state.fields.isEmpty()) {
+            Text(stringResource(R.string.record_no_fields), style = MaterialTheme.typography.bodyMedium)
+        }
+        state.fields.forEach { field -> FieldEditor(field, ctx) }
     }
 }
 
@@ -222,7 +292,13 @@ private fun PrevNextBar(state: RecordUiState, onGo: (Int) -> Unit) {
                     contentDescription = stringResource(R.string.record_previous)
                 )
             }
-            Text(stringResource(R.string.record_position, state.index + 1, state.recordIds.size))
+            Text(
+                if (state.isNew) {
+                    stringResource(R.string.record_new)
+                } else {
+                    stringResource(R.string.record_position, state.index + 1, state.recordIds.size)
+                }
+            )
             IconButton(onClick = { onGo(1) }, enabled = state.index < state.recordIds.lastIndex) {
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -234,3 +310,6 @@ private fun PrevNextBar(state: RecordUiState, onGo: (Int) -> Unit) {
 }
 
 private val SWIPE_DISTANCE = 96.dp
+
+/** [RecordScreen]'s pending-leave value for going back, as opposed to -1/+1 for previous/next. */
+private const val BACK = 0

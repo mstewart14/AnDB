@@ -48,11 +48,6 @@ class RecordListViewModel(
         }
     }
 
-    /** Adds a record, then calls [onCreated] with its id. */
-    fun create(onCreated: (Long) -> Unit) {
-        launchReporting { onCreated(records.create(databaseId)) }
-    }
-
     private fun row(record: Record, fields: List<FieldDef>) = RecordRow(
         record.id,
         fields.mapNotNull { field ->

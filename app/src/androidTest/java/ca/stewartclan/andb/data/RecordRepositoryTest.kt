@@ -9,6 +9,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,5 +115,72 @@ class RecordRepositoryTest {
 
         repository.delete(authors)
         assertEquals(emptyList<String>(), records.choicesFor(lookup))
+    }
+
+    @Test
+    fun requiredFieldsMustBeFilledToInsert() = runBlocking {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING, required = true)
+        val tags = repository.addField(
+            id,
+            "Tags",
+            FieldType.LIST,
+            ListProps(listOf("a"), multiple = true),
+            required = true
+        )
+
+        assertRefused(listOf("Title", "Tags")) { records.create(id) }
+        assertRefused(listOf("Tags")) { records.insert(id, mapOf(title.id to "Dune"), emptyMap()) }
+        assertRefused(listOf("Title")) { records.insert(id, mapOf(title.id to "  "), mapOf(tags.id to listOf("a"))) }
+        assertEquals(emptyList<Long>(), records.recordIds(id))
+
+        val r = records.insert(id, mapOf(title.id to "Dune"), mapOf(tags.id to listOf("a")))
+        assertEquals("Dune", records.record(id, r)!!.values[title.id])
+    }
+
+    @Test
+    fun saveCannotEmptyARequiredField() = runBlocking {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING, required = true)
+        val note = repository.addField(id, "Note", FieldType.NOTE)
+        val r = records.insert(id, mapOf(title.id to "Dune"), emptyMap())
+
+        assertRefused(listOf("Title")) { records.save(id, r, mapOf(title.id to null), emptyMap()) }
+        // Fields not given keep their stored value, which counts.
+        records.save(id, r, mapOf(note.id to "Signed"), emptyMap())
+
+        val record = records.record(id, r)!!
+        assertEquals("Dune", record.values[title.id])
+        assertEquals("Signed", record.values[note.id])
+    }
+
+    @Test
+    fun recordsFromBeforeAFieldWasRequiredMustBeCompletedToChange() = runBlocking {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING)
+        val rating = repository.addField(id, "Rating", FieldType.RATING)
+        val r = records.create(id)
+        repository.updateField(id, FieldDef(title.id, 0, "Title", FieldType.STRING, NoProps, required = true))
+
+        assertRefused(listOf("Title")) { records.save(id, r, mapOf(rating.id to 4L), emptyMap()) }
+        assertRefused(listOf("Title")) { records.duplicate(id, r) }
+
+        records.save(id, r, mapOf(title.id to "Dune", rating.id to 4L), emptyMap())
+        assertEquals(4L, records.record(id, r)!!.values[rating.id])
+    }
+
+    @Test
+    fun zeroStarsDoesNotFillARequiredRating() = runBlocking<Unit> {
+        val id = repository.create("Books")
+        val rating = repository.addField(id, "Rating", FieldType.RATING, required = true)
+
+        assertRefused(listOf("Rating")) { records.insert(id, mapOf(rating.id to 0L), emptyMap()) }
+        records.insert(id, mapOf(rating.id to 3L), emptyMap())
+    }
+
+    private suspend fun assertRefused(fields: List<String>, block: suspend () -> Unit) {
+        val error = runCatching { block() }.exceptionOrNull()
+        assertTrue("expected refusal, got $error", error is RequiredFieldsMissingException)
+        assertEquals(fields, (error as RequiredFieldsMissingException).fields)
     }
 }

@@ -39,6 +39,13 @@ enum class FieldType(val code: String, val storage: Storage) {
     MODIFIED("modified", Storage.NONE),
     ID("id", Storage.ANY);
 
+    /**
+     * Whether a field of this type can be required: it holds a value the user enters. Checkboxes
+     * are left out, as "must be ticked" is a different rule from "must be filled in".
+     */
+    val canBeRequired: Boolean
+        get() = storage != Storage.NONE && this != BOOLEAN && this != ID
+
     companion object {
         private val byCode = entries.associateBy { it.code }
 
