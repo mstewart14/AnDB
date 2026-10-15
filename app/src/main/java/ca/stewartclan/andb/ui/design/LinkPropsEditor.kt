@@ -26,16 +26,18 @@ import kotlinx.serialization.json.Json
 data class LinkDraft(
     val source: LinkSource = LinkSource.PHOTO,
     val databaseId: String? = null,
-    val displayFieldId: Long? = null
+    val displayFieldId: Long? = null,
+    /** Kept while [databaseId] is still the deleted database it names. */
+    val missingName: String? = null
 ) {
     /** The settings, or null while a record link has no database chosen. */
     fun toProps(): LinkProps? = when (source) {
         LinkSource.PHOTO -> LinkProps(LinkSource.PHOTO)
-        LinkSource.RECORD -> databaseId?.let { LinkProps(LinkSource.RECORD, it, displayFieldId) }
+        LinkSource.RECORD -> databaseId?.let { LinkProps(LinkSource.RECORD, it, displayFieldId, missingName) }
     }
 
     companion object {
-        fun of(props: LinkProps) = LinkDraft(props.source, props.databaseId, props.displayFieldId)
+        fun of(props: LinkProps) = LinkDraft(props.source, props.databaseId, props.displayFieldId, props.missingName)
 
         val Saver = Saver<LinkDraft, String>(
             save = { Json.encodeToString(serializer(), it) },
@@ -81,14 +83,25 @@ fun LinkPropsEditor(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup
 @Composable
 private fun RecordTarget(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup: LookupContext) {
     LaunchedEffect(draft.databaseId) { lookup.onChange(draft.databaseId, null) }
+    val gone = draft.databaseId != null && lookup.databases.none { it.id == draft.databaseId }
+    if (gone) {
+        Text(
+            draft.missingName?.let { stringResource(R.string.link_database_deleted_named, it) }
+                ?: stringResource(R.string.link_database_deleted),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
     Picker(
         label = stringResource(R.string.link_database),
         selected = lookup.databases.find { it.id == draft.databaseId }?.name,
         options = lookup.databases.map { it.id to it.name },
-        onSelect = { onDraftChange(draft.copy(databaseId = it, displayFieldId = null)) },
+        // The display field is worked out afresh for the new database (see RelinkPreview).
+        onSelect = { onDraftChange(draft.copy(databaseId = it, displayFieldId = null, missingName = null)) },
         modifier = Modifier.padding(top = 8.dp)
     )
-    if (draft.databaseId == null) return
+    if (draft.databaseId == null || gone) return
     val fields = lookup.info.fields.orEmpty()
     val candidates = fields.filter { it == RecordTitles.displayField(fields, it.id) && it.props !is LinkProps }
     Picker(

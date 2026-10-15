@@ -252,6 +252,14 @@
     <string name="record_link_none_to_choose">That database has no records yet.</string>
     <string name="record_link_facet">%1$s: %2$s</string>
     <string name="record_link_any">Any</string>
+    <string name="link_database_deleted_named">“%1$s”, the database this field linked to, was deleted. Choose its replacement.</string>
+    <string name="link_database_deleted">The database this field linked to was deleted. Choose its replacement.</string>
+    <string name="list_link_broken">%1$s links to a deleted database.</string>
+    <string name="list_link_fix">Fix</string>
+    <plurals name="list_link_repaired">
+        <item quantity="one">%1$s now links to the new “%2$s”: %3$d of %4$d link relinked by title.</item>
+        <item quantity="other">%1$s now links to the new “%2$s”: %3$d of %4$d links relinked by title.</item>
+    </plurals>
 
     <string name="backlinks_title">Linked from</string>
     <string name="backlinks_group">%1$s \u00b7 %2$s (%3$d)</string>

@@ -42,7 +42,8 @@ fun AnDbNavHost() {
                 onEditDesign = { navController.navigate(DesignRoute(it)) },
                 onEditView = { db, view -> navController.navigate(ViewEditorRoute(db, view)) },
                 onEditFilter = { db, filter -> navController.navigate(FilterEditorRoute(db, filter)) },
-                onImportCsv = { db, uri -> navController.navigate(CsvImportRoute(db, uri)) }
+                onImportCsv = { db, uri -> navController.navigate(CsvImportRoute(db, uri)) },
+                onFixLink = { db, field -> navController.navigate(DesignRoute(db, field)) }
             )
         }
         composable<CsvImportRoute> { CsvImportScreen(onDone = back) }

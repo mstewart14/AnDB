@@ -110,6 +110,14 @@ very large photo collections would need the planned copy-into-app mode.
   show as unavailable. Off, the links are cleared. Linked fields showing
   through it move to the field of the same name. A link is only resolved in
   its field's current database, never by record id alone.
+- Deleting a database records its name in every Link field pointing at it.
+  Opening a database whose Link field points at a deleted one: if exactly one
+  database now has that name, the field moves there by itself, relinked by
+  title, and a message says so. Otherwise the list shows "<field> links to a
+  deleted database" with **Fix**, which opens the field's settings with the
+  database matching the most saved titles already chosen. Whenever a database
+  is chosen, its display field defaults to the field matching the most saved
+  titles.
 
 **Device links (planned).** Contacts and files the same way: snapshot, fallback
 identifiers (contact name/phone/email, iCalendar UID) to re-match after sync.

@@ -43,6 +43,20 @@ class RecordTitles(private val repository: DatabaseRepository, private val recor
     }
 
     /**
+     * For each field of database [databaseId] that could be its display field: what it shows for
+     * every record, by record id (as [values]). Empty if the database is gone.
+     */
+    suspend fun titlesByField(databaseId: String): List<Pair<FieldDef, Map<Long, String>>> = try {
+        val all = records.records(databaseId)
+        repository.fields(databaseId).filter { it.canBeColumn && it.props !is LinkProps && it.props !is LinkedProps }
+            .map { field -> field to all.associate { it.id to title(field, it) } }
+    } catch (_: SQLiteException) {
+        emptyList()
+    } catch (_: IllegalStateException) {
+        emptyList()
+    }
+
+    /**
      * What field [fieldId] (the display field when null) shows for every record of database
      * [databaseId], by record id; a record with nothing to show is "#id". Empty if the database
      * is gone.

@@ -12,7 +12,6 @@ import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.LinkProps
 import ca.stewartclan.andb.data.LinkedProps
-import ca.stewartclan.andb.data.Repoint
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
 import ca.stewartclan.andb.ui.common.RecordTitles
@@ -25,13 +24,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/** What relinking by title would do when Link field [fieldId] is pointed at [link]'s database. */
-data class RelinkPreview(val fieldId: Long, val link: LinkProps, val plan: RelinkPlan)
+/**
+ * What relinking by title would do when Link field [fieldId] is pointed at [link]'s database. With
+ * no display field chosen yet, [bestDisplayFieldId] is the one matching the most saved titles.
+ */
+data class RelinkPreview(val fieldId: Long, val link: LinkProps, val plan: RelinkPlan, val bestDisplayFieldId: Long?)
 
 class DesignViewModel(
     private val repository: DatabaseRepository,
-    private val titles: RecordTitles,
-    val databaseId: String
+    private val repair: LinkRepair,
+    val databaseId: String,
+    /** The field whose dialog opens first, if any. */
+    val openFieldId: Long? = null
 ) : ReportingViewModel() {
 
     val database: StateFlow<DatabaseSummary?> = repository.databases
@@ -73,7 +77,13 @@ class DesignViewModel(
      */
     fun updateField(field: FieldDef, entered: FieldDef, relink: Boolean) = change {
         val new = entered.copy(id = field.id, position = field.position, name = entered.name.trim())
-        if (new != field) repository.updateField(databaseId, new, repoint(field, new, relink))
+        if (new != field) {
+            repository.updateField(
+                databaseId,
+                new,
+                repair.repoint(databaseId, fields.value.orEmpty(), field, new, relink)
+            )
+        }
     }
 
     private val _relinkPreview = MutableStateFlow<RelinkPreview?>(null)
@@ -89,23 +99,20 @@ class DesignViewModel(
         previewJob?.cancel()
         previewJob = launchReporting {
             _relinkPreview.value = null
-            _relinkPreview.value = RelinkPreview(field.id, link, relinkPlan(field, link))
+            val best = link.databaseId?.takeIf { link.displayFieldId == null }?.let {
+                repair.bestMatch(repository.linkTitles(databaseId, field.id), it).displayFieldId
+            }
+            _relinkPreview.value = RelinkPreview(field.id, link, repair.plan(databaseId, field, link), best)
         }
     }
 
-    private suspend fun relinkPlan(field: FieldDef, link: LinkProps): RelinkPlan =
-        Relink.plan(repository.linkTitles(databaseId, field.id), titles.titles(link), link.databaseId.orEmpty())
+    private val _replacements = MutableStateFlow<Map<Long, Replacement>>(emptyMap())
 
-    private suspend fun repoint(old: FieldDef, new: FieldDef, relink: Boolean): Repoint? {
-        val to = new.recordLink?.takeIf { isRepoint(old, new) } ?: return null
-        // The old database may be gone, and with it the names of the fields Linked fields showed.
-        val oldTargets = runCatching { repository.fields(old.recordLink?.databaseId.orEmpty()) }.getOrNull()
-        val newTargets = repository.fields(to.databaseId.orEmpty())
-        return Repoint(
-            links = if (relink) relinkPlan(old, to).links else null,
-            linkedTargets = Relink.linkedTargets(fields.value.orEmpty(), old.id, oldTargets, newTargets)
-        )
-    }
+    /**
+     * For each Link field whose database was deleted, the database suggested in its place, by
+     * field id; the field's dialog starts with it chosen.
+     */
+    val replacements: StateFlow<Map<Long, Replacement>> = _replacements.asStateFlow()
 
     /** Moves [field] [by] places in display order (negative is up). */
     fun moveField(field: FieldDef, by: Int) = change {
@@ -142,6 +149,10 @@ class DesignViewModel(
 
     private suspend fun reload() {
         val fields = repository.fields(databaseId)
+        // Before the fields, so a dialog opened for a broken Link starts with its suggestion.
+        _replacements.value = repair.broken(fields).mapNotNull { field ->
+            repair.suggest(databaseId, field)?.let { field.id to it }
+        }.toMap()
         _fields.value = fields
         val byId = fields.associateBy { it.id }
         _linkedTargets.value = fields.mapNotNull { field ->
@@ -167,10 +178,12 @@ class DesignViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as AnDbApplication
+                val route = createSavedStateHandle().toRoute<DesignRoute>()
                 DesignViewModel(
                     app.repository,
-                    app.recordTitles,
-                    createSavedStateHandle().toRoute<DesignRoute>().databaseId
+                    LinkRepair(app.repository, app.recordTitles),
+                    route.databaseId,
+                    route.editFieldId
                 )
             }
         }

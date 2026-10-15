@@ -88,6 +88,7 @@ fun RecordListScreen(
     onEditView: (databaseId: String, viewId: Long) -> Unit,
     onEditFilter: (databaseId: String, filterId: Long) -> Unit,
     onImportCsv: (databaseId: String, uri: String) -> Unit,
+    onFixLink: (databaseId: String, fieldId: Long) -> Unit,
     viewModel: RecordListViewModel = viewModel(factory = RecordListViewModel.Factory)
 ) {
     val database by viewModel.database.collectAsStateWithLifecycle()
@@ -95,6 +96,7 @@ fun RecordListScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
+    RepairedSnackbar(viewModel, snackbarHostState)
     var confirmDeleteView by rememberSaveable { mutableStateOf(false) }
     var choosingFilter by rememberSaveable { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
@@ -135,7 +137,8 @@ fun RecordListScreen(
                 onSort = viewModel::sortBy
             ),
             filters = filterActions
-        )
+        ),
+        onFixLink = { onFixLink(db, it.id) }
     )
 
     if (choosingFilter) {
@@ -152,6 +155,8 @@ fun RecordListContent(
     state: ListUiState?,
     snackbarHostState: SnackbarHostState,
     actions: ListActions,
+    /** Opens the settings of a Link field whose database was deleted, to choose its replacement. */
+    onFixLink: (FieldDef) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -159,6 +164,7 @@ fun RecordListContent(
         topBar = {
             Column {
                 ListTopBar(title, state, actions)
+                state?.brokenLinks?.forEach { BrokenLinkRow(it, onFixLink) }
                 val filter = state?.filter
                 if (filter != null && state.find == null) {
                     ActiveFilterRow(filter, state.rows.size, state.totalCount, actions.filters.onChoose) {

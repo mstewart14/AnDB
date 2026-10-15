@@ -55,8 +55,36 @@ class DatabaseRepository(
         withDatabase(id) { setMeta(DatabaseFile.META_NAME, name) }
     }
 
+    /**
+     * Deletes database [id]. Link fields elsewhere that point at it remember its name, so a new
+     * database of that name can take its place.
+     */
     suspend fun delete(id: String) = mutate {
+        val name = withDatabase(id) { getMeta(DatabaseFile.META_NAME) }
+        if (name != null) rememberDeletedName(id, name)
         check(SQLiteDatabase.deleteDatabase(fileFor(id))) { "No database $id" }
+    }
+
+    private fun rememberDeletedName(id: String, name: String) {
+        val files = dir.listFiles { f -> f.isFile && f.extension == DatabaseFile.EXTENSION }.orEmpty()
+        files.mapNotNull(::readSummary).filter { it.id != id }.forEach { other ->
+            try {
+                withDatabase(other.id) {
+                    readFields().filter { it.recordLink?.databaseId == id }.forEach { field ->
+                        val props = (field.props as LinkProps).copy(missingName = name)
+                        execSQL(
+                            "UPDATE andb_field SET props = ? WHERE id = ?",
+                            arrayOf(FieldProps.encode(props), field.id)
+                        )
+                    }
+                }
+            } catch (e: SQLiteException) {
+                // One unwritable database mustn't stop the delete; its links just won't know the name.
+                Log.w(TAG, "Couldn't note deleted database in ${other.id}", e)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Skipping ${other.id}: ${e.message}")
+            }
+        }
     }
 
     suspend fun fields(id: String): List<FieldDef> = withContext(ioDispatcher) {

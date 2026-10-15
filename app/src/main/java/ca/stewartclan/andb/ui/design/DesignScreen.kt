@@ -55,9 +55,9 @@ import ca.stewartclan.andb.ui.common.dragToReorder
 import ca.stewartclan.andb.ui.theme.AnDbTheme
 import kotlinx.serialization.Serializable
 
-/** Navigation route for a database's design view (its field list). */
+/** Navigation route for a database's design view (its field list), opening field [editFieldId]'s dialog. */
 @Serializable
-data class DesignRoute(val databaseId: String)
+data class DesignRoute(val databaseId: String, val editFieldId: Long? = null)
 
 /** Edit-dialog id meaning "add a new field" (`null` means no dialog). Field ids are rowids, never 0. */
 private const val NEW_FIELD_ID = 0L
@@ -72,11 +72,12 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
     val snackbarHostState = remember { SnackbarHostState() }
     ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
     // Dialogs remember the field id (or NEW_FIELD_ID), so they survive rotation.
-    var editId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var editId by rememberSaveable { mutableStateOf(viewModel.openFieldId) }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val recordCount = database?.recordCount ?: 0
     val lookupContext = rememberLookupContext(viewModel)
     val relinkPreview by viewModel.relinkPreview.collectAsStateWithLifecycle()
+    val replacements by viewModel.replacements.collectAsStateWithLifecycle()
 
     DesignContent(
         databaseName = database?.name.orEmpty(),
@@ -100,6 +101,7 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
             recordCount = recordCount,
             lookup = lookupContext,
             relink = RelinkContext(relinkPreview, viewModel::loadRelinkPreview),
+            startLink = editing?.let { replacements[it.id]?.link },
             check = { viewModel.checkName(it, editing = editing) },
             onConfirm = { entered, relink ->
                 if (editing == null) viewModel.addField(entered) else viewModel.updateField(editing, entered, relink)

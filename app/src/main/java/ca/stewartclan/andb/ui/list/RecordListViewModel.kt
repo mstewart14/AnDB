@@ -28,6 +28,8 @@ import ca.stewartclan.andb.data.csv.Csv
 import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
+import ca.stewartclan.andb.ui.design.LinkRepair
+import ca.stewartclan.andb.ui.design.Repaired
 import ca.stewartclan.andb.ui.record.FieldValues
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,7 +62,9 @@ data class ListUiState(
     val find: FindQuery?,
     val filters: List<Filter>,
     /** The filter applied, or null for all records. */
-    val filter: Filter?
+    val filter: Filter?,
+    /** Link fields whose database was deleted, with no replacement found by name. */
+    val brokenLinks: List<FieldDef> = emptyList()
 )
 
 /** Everything loaded for the current view, before the filter and Find narrow it. */
@@ -87,7 +91,8 @@ class ListStores(
     val records: RecordRepository,
     val views: ViewRepository,
     val filters: FilterRepository,
-    val titles: RecordTitles
+    val titles: RecordTitles,
+    val repair: LinkRepair
 )
 
 class RecordListViewModel(
@@ -182,8 +187,22 @@ class RecordListViewModel(
     }
 
     /** Loads view [viewId], or the one last shown, or the first. */
+    private val _repaired = MutableStateFlow<List<Repaired>>(emptyList())
+
+    /** Link fields just pointed at a new database of their deleted one's name, until the screen has said so. */
+    val repaired: StateFlow<List<Repaired>> = _repaired.asStateFlow()
+
+    fun repairedShown() {
+        _repaired.value = emptyList()
+    }
+
+    /** Link fields whose database was deleted and has no replacement of the same name. */
+    private var brokenLinks: List<FieldDef> = emptyList()
+
     private suspend fun load(viewId: Long?) {
         if (repository.databases.value == null) repository.refresh()
+        stores.repair.repairByName(databaseId, repository.fields(databaseId)).takeIf { it.isNotEmpty() }
+            ?.let { _repaired.value = it }
         val fields = repository.fields(databaseId)
         val views = viewStore.views(databaseId)
         val wanted = viewId ?: viewStore.currentViewId(databaseId)
@@ -213,6 +232,7 @@ class RecordListViewModel(
                 searchable.associate { it.id to shownText(it, record) }
             )
         }
+        brokenLinks = stores.repair.broken(fields)
         loaded = Loaded(views, view, columns, fields, entries, filters, filters.find { it.id == filterId })
         publish()
     }
@@ -238,7 +258,8 @@ class RecordListViewModel(
             searchable = data.searchable,
             find = query,
             filters = data.filters,
-            filter = data.filter
+            filter = data.filter,
+            brokenLinks = brokenLinks
         )
     }
 
@@ -283,7 +304,14 @@ class RecordListViewModel(
                 val app = this[APPLICATION_KEY] as AnDbApplication
                 val savedState = createSavedStateHandle()
                 RecordListViewModel(
-                    ListStores(app.repository, app.records, app.views, app.filters, app.recordTitles),
+                    ListStores(
+                        app.repository,
+                        app.records,
+                        app.views,
+                        app.filters,
+                        app.recordTitles,
+                        LinkRepair(app.repository, app.recordTitles)
+                    ),
                     app.browseOrder,
                     savedState,
                     savedState.toRoute<RecordListRoute>().databaseId

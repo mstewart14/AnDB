@@ -66,6 +66,8 @@ fun FieldDialog(
     recordCount: Long,
     lookup: LookupContext,
     relink: RelinkContext,
+    /** Link settings to start with instead of the field's, e.g. a replacement for a deleted database. */
+    startLink: LinkProps? = null,
     check: (String) -> NameProblem,
     /**
      * Gets the field as entered: name, type, settings and required (id and position unset), and
@@ -74,7 +76,15 @@ fun FieldDialog(
     onConfirm: (FieldDef, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val draft = rememberFieldDraft(field)
+    val draft = rememberFieldDraft(field, startLink)
+    // A database just chosen starts with the display field that matches the most saved titles.
+    LaunchedEffect(relink.preview) {
+        val preview = relink.preview ?: return@LaunchedEffect
+        val link = draft.linkDraft
+        if (preview.fieldId == field?.id && preview.link.databaseId == link.databaseId && link.displayFieldId == null) {
+            preview.bestDisplayFieldId?.let { draft.linkDraft = link.copy(displayFieldId = it) }
+        }
+    }
     val problem = check(draft.name.text)
     val entered = draft.toField()
     val canConfirm = problem == NameProblem.OK && entered != null
@@ -148,7 +158,7 @@ class FieldDraft(
 }
 
 @Composable
-private fun rememberFieldDraft(field: FieldDef?): FieldDraft {
+private fun rememberFieldDraft(field: FieldDef?, startLink: LinkProps?): FieldDraft {
     val name = rememberNameState(field?.name.orEmpty())
     val type = rememberSaveable { mutableStateOf(field?.type ?: FieldType.STRING) }
     val idDraft = rememberSaveable(stateSaver = IdDraft.Saver) {
@@ -158,7 +168,7 @@ private fun rememberFieldDraft(field: FieldDef?): FieldDraft {
         mutableStateOf((field?.props as? ListProps)?.let(ListDraft::of) ?: ListDraft())
     }
     val linkDraft = rememberSaveable(stateSaver = LinkDraft.Saver) {
-        mutableStateOf((field?.props as? LinkProps)?.let(LinkDraft::of) ?: LinkDraft())
+        mutableStateOf((startLink ?: field?.props as? LinkProps)?.let(LinkDraft::of) ?: LinkDraft())
     }
     val linkedDraft = rememberSaveable(stateSaver = LinkedPropsSaver) {
         mutableStateOf(field?.props as? LinkedProps ?: LinkedProps())
