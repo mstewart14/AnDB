@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -52,12 +53,18 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ca.stewartclan.andb.R
+import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
 import kotlinx.serialization.Serializable
 
-/** Navigation route for one record of a database; [NEW_RECORD_ID] starts a new one. */
+/**
+ * Navigation route for one record of a database; [NEW_RECORD_ID] starts a new one, whose Link field
+ * [linkFieldId] (if not 0) starts linked to [linkTo].
+ */
 @Serializable
-data class RecordRoute(val databaseId: String, val recordId: Long)
+data class RecordRoute(val databaseId: String, val recordId: Long, val linkFieldId: Long = 0, val linkTo: String = "") {
+    val prelink: Prelink? get() = if (linkFieldId != 0L) Prelink(linkFieldId, linkTo) else null
+}
 
 /** Record id of a record being entered and not yet stored. Stored records' ids start at 1. */
 const val NEW_RECORD_ID = 0L
@@ -66,6 +73,8 @@ const val NEW_RECORD_ID = 0L
 fun RecordScreen(
     onBack: () -> Unit,
     onOpenRecord: (databaseId: String, recordId: Long) -> Unit,
+    /** Starts a new record in a database, with its Link field already linked to the given uri. */
+    onAddLinkedRecord: (databaseId: String, linkFieldId: Long, linkTo: String) -> Unit,
     viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory)
 ) {
     val database by viewModel.database.collectAsStateWithLifecycle()
@@ -96,6 +105,7 @@ fun RecordScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshLinks() }
     LaunchedEffect(finished) { if (finished) onBack() }
 
+    val links = linkActions(viewModel, onOpenRecord, onAddLinkedRecord)
     RecordContent(
         title = database?.name.orEmpty(),
         state = state,
@@ -107,17 +117,14 @@ fun RecordScreen(
             onGo = go,
             onNew = viewModel::newRecord,
             onDuplicate = { viewModel.duplicate() },
-            onDelete = { confirmDelete = true }
+            onDelete = { confirmDelete = true },
+            links = links
         ),
-        editor = {
-            viewModel.editorContext(it, locked) { ref ->
-                viewModel.saveInBackground()
-                onOpenRecord(ref.databaseId, ref.recordId)
-            }
-        }
+        editor = { viewModel.editorContext(it, locked) { ref -> links.onOpen(ref.databaseId, ref.recordId) } }
     )
 
-    if (confirmDelete) DeleteRecordDialog(onConfirm = { viewModel.delete() }, onClose = { confirmDelete = false })
+    val linkCount = state?.backlinks?.sumOf { it.records.size } ?: 0
+    if (confirmDelete) DeleteRecordDialog(linkCount, onConfirm = viewModel::delete, onClose = { confirmDelete = false })
     pendingLeave?.let { leaving ->
         state?.let {
             RequiredLeaveDialog(
@@ -140,15 +147,42 @@ private class RecordActions(
     val onGo: (Int) -> Unit,
     val onNew: () -> Unit,
     val onDuplicate: () -> Unit,
-    val onDelete: () -> Unit
+    val onDelete: () -> Unit,
+    val links: LinkActions
 )
 
-/** [onConfirm] deletes; [onClose] closes the dialog, after either button. */
+/** Leaving for another record saves this one first. */
+private fun linkActions(
+    viewModel: RecordViewModel,
+    onOpenRecord: (String, Long) -> Unit,
+    onAddLinkedRecord: (String, Long, String) -> Unit
+) = LinkActions(
+    onOpen = { databaseId, recordId ->
+        viewModel.saveInBackground()
+        onOpenRecord(databaseId, recordId)
+    },
+    onAdd = { group ->
+        viewModel.state.value?.record?.id?.let { here ->
+            viewModel.saveInBackground()
+            onAddLinkedRecord(group.databaseId, group.field.id, RecordRef(viewModel.databaseId, here).uri)
+        }
+    }
+)
+
+/**
+ * [onConfirm] deletes; [onClose] closes the dialog, after either button. Says how many records
+ * ([linkCount]) link to this one, as their links will show it as deleted.
+ */
 @Composable
-private fun DeleteRecordDialog(onConfirm: () -> Unit, onClose: () -> Unit) {
+private fun DeleteRecordDialog(linkCount: Int, onConfirm: () -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.record_delete_title)) },
+        text = if (linkCount > 0) {
+            { Text(pluralStringResource(R.plurals.record_delete_linked, linkCount, linkCount)) }
+        } else {
+            null
+        },
         confirmButton = {
             TextButton(onClick = {
                 onConfirm()
@@ -194,7 +228,9 @@ private fun RecordContent(
         bottomBar = { if (state != null) PrevNextBar(state, actions.onGo) },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        if (state != null) RecordForm(state, editor(state), actions.onGo, Modifier.padding(innerPadding))
+        if (state != null) {
+            RecordForm(state, editor(state), actions.onGo, actions.links, Modifier.padding(innerPadding))
+        }
     }
 }
 
@@ -225,7 +261,13 @@ private fun RecordTopBar(title: String, locked: Boolean, actions: RecordActions)
 
 /** All the record's fields, scrolling; swiping sideways calls [onGo] with +1 (next) or -1. */
 @Composable
-private fun RecordForm(state: RecordUiState, ctx: EditorContext, onGo: (Int) -> Unit, modifier: Modifier) {
+private fun RecordForm(
+    state: RecordUiState,
+    ctx: EditorContext,
+    onGo: (Int) -> Unit,
+    links: LinkActions,
+    modifier: Modifier
+) {
     val swipeDistance = with(LocalDensity.current) { SWIPE_DISTANCE.toPx() }
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -258,6 +300,7 @@ private fun RecordForm(state: RecordUiState, ctx: EditorContext, onGo: (Int) -> 
             Text(stringResource(R.string.record_no_fields), style = MaterialTheme.typography.bodyMedium)
         }
         state.fields.forEach { field -> FieldEditor(field, ctx) }
+        BacklinksSection(state.backlinks, ctx.readOnly, links)
     }
 }
 

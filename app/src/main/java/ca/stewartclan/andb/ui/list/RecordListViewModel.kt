@@ -16,6 +16,7 @@ import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.Filter
 import ca.stewartclan.andb.data.FilterRepository
 import ca.stewartclan.andb.data.LinkValue
+import ca.stewartclan.andb.data.LinkedProps
 import ca.stewartclan.andb.data.ListView
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRef
@@ -167,7 +168,8 @@ class RecordListViewModel(
         // Linked records show live, by their display field.
         val titles = (columns.map { it.field } + searchable).distinct()
             .mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
-        val shownText = { field: FieldDef, record: Record -> shown(field, record, titles) }
+        val linked = stores.titles.linkedValues(fields)
+        val shownText = { field: FieldDef, record: Record -> shown(field, record, titles, linked) }
         val entries = records.records(databaseId, view.sort).map { record ->
             Entry(
                 record,
@@ -221,11 +223,24 @@ class RecordListViewModel(
     }
 
     /** What [field] of [record] shows in the list. */
-    /** What [field] of [record] shows; a record link shows its record's title from [titles] if it still exists. */
-    private fun shown(field: FieldDef, record: Record, titles: Map<Long, Map<Long, String>>): String {
-        val link = record.values[field.id] as? LinkValue
+    /**
+     * What [field] of [record] shows. A record link shows its record's title from [titles] if it
+     * still exists; a Linked field shows its value from [linked] for the record its link points at.
+     */
+    private fun shown(
+        field: FieldDef,
+        record: Record,
+        titles: Map<Long, Map<Long, String>>,
+        linked: Map<Long, Map<Long, String>>
+    ): String {
+        val linkedVia = (field.props as? LinkedProps)?.linkFieldId
+        val link = record.values[linkedVia ?: field.id] as? LinkValue
         val ref = link?.let { RecordRef.parse(it.uri) }
-        return if (ref != null) titles[field.id]?.get(ref.recordId) ?: link.name else FieldValues.shown(field, record)
+        return when {
+            linkedVia != null -> ref?.let { linked[field.id]?.get(it.recordId) }.orEmpty()
+            ref != null -> titles[field.id]?.get(ref.recordId) ?: link.name
+            else -> FieldValues.shown(field, record)
+        }
     }
 
     companion object {

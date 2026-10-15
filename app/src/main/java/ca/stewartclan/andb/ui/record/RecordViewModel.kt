@@ -50,6 +50,10 @@ data class RecordUiState(
     val listChoices: Map<Long, List<String>>,
     /** For each Link field to records: the titles of the records it can link to, by record id. */
     val recordTitles: Map<Long, Map<Long, String>> = emptyMap(),
+    /** For each Linked field: what it shows for each record its Link field can link to. */
+    val linkedValues: Map<Long, Map<Long, String>> = emptyMap(),
+    /** Records in any database linking to this one. */
+    val backlinks: List<BacklinkGroup> = emptyList(),
     val dirty: Boolean = false,
     /** Whether to point out empty required fields, after an attempt to move on without them. */
     val showMissing: Boolean = false
@@ -76,6 +80,17 @@ data class RecordUiState(
     val wouldLoseEdits: Boolean get() = hasUnsavedInput && missing.isNotEmpty()
 }
 
+/** Records of database [databaseId] linking here through Link [field], as (record id, title). */
+data class BacklinkGroup(
+    val databaseId: String,
+    val databaseName: String,
+    val field: FieldDef,
+    val records: List<Pair<Long, String>>
+)
+
+/** A new record's Link field [fieldId] starts linked to [uri], as when adding from a backlink. */
+data class Prelink(val fieldId: Long, val uri: String)
+
 /** Where the record view's data comes from. */
 class RecordStores(val repository: DatabaseRepository, val records: RecordRepository, val titles: RecordTitles)
 
@@ -85,8 +100,10 @@ class RecordViewModel(
     private val appScope: CoroutineScope,
     private val savedState: SavedStateHandle,
     private val browseOrder: BrowseOrder,
-    private val databaseId: String,
-    startRecordId: Long
+    val databaseId: String,
+    startRecordId: Long,
+    /** For the first new record shown, if it was started from a backlink. */
+    private var prelink: Prelink? = null
 ) : ReportingViewModel() {
 
     private val repository = stores.repository
@@ -252,35 +269,61 @@ class RecordViewModel(
         val listChoices = _state.value?.listChoices ?: fields.filter { it.type == FieldType.LIST }
             .associate { it.id to records.choicesFor(it) }
         val recordTitles = _state.value?.recordTitles ?: loadTitles(fields)
+        val linkedValues = _state.value?.linkedValues ?: stores.titles.linkedValues(fields)
+        val links = links(fields, record) + prelinked(recordTitles)
         _state.value = RecordUiState(
             fields = fields,
             recordIds = browseOrder.arrange(databaseId, records.recordIds(databaseId)),
             record = record,
             drafts = drafts(record),
             chosen = record.choices,
-            links = links(fields, record),
+            links = links,
             listChoices = listChoices,
-            recordTitles = recordTitles
+            recordTitles = recordTitles,
+            linkedValues = linkedValues,
+            backlinks = if (record.id == NEW_RECORD_ID) emptyList() else loadBacklinks(record.id)
         )
         savedState[KEY_RECORD] = recordId
     }
+
+    /**
+     * The link a new record started from a backlink begins with, once. It isn't an edit: leaving
+     * without entering anything stores nothing.
+     */
+    private fun prelinked(recordTitles: Map<Long, Map<Long, String>>): Map<Long, LinkValue> {
+        val link = prelink.also { prelink = null }
+        val title = link?.let { RecordRef.parse(it.uri) }?.let { recordTitles[link.fieldId]?.get(it.recordId) }
+        return if (link != null &&
+            title != null
+        ) {
+            mapOf(link.fieldId to LinkValue(link.uri, title, null))
+        } else {
+            emptyMap()
+        }
+    }
+
+    private suspend fun loadBacklinks(recordId: Long): List<BacklinkGroup> =
+        records.backlinks(databaseId, recordId).map { group ->
+            val titles = stores.titles.values(group.databaseId, null)
+            BacklinkGroup(
+                group.databaseId,
+                group.databaseName,
+                group.field,
+                group.recordIds.map { it to (titles[it] ?: "#$it") }
+            )
+        }
 
     /** Reloads linked records' titles, which may have changed elsewhere; when the screen is shown again. */
     fun refreshLinks() = launchReporting {
         val state = _state.value ?: return@launchReporting
         val titles = loadTitles(state.fields)
-        _state.update { it?.copy(recordTitles = titles) }
+        val linked = stores.titles.linkedValues(state.fields)
+        val backlinks = if (state.isNew) emptyList() else loadBacklinks(state.record.id)
+        _state.update { it?.copy(recordTitles = titles, linkedValues = linked, backlinks = backlinks) }
     }
 
     private suspend fun loadTitles(fields: List<FieldDef>): Map<Long, Map<Long, String>> =
         fields.mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
-
-    /** Editor text of [record]'s values; links are kept apart, as [links]. */
-    private fun drafts(record: Record): Map<Long, String> =
-        record.values.filterValues { it !is LinkValue }.mapValues { (_, v) -> FieldValues.toDraft(v) }
-
-    private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> =
-        fields.filter { it.type == FieldType.LINK }.associate { it.id to record.values[it.id] as? LinkValue }
 
     override fun onCleared() {
         saveInBackground()
@@ -302,9 +345,17 @@ class RecordViewModel(
                     savedState,
                     app.browseOrder,
                     route.databaseId,
-                    route.recordId
+                    route.recordId,
+                    route.prelink
                 )
             }
         }
     }
 }
+
+/** Editor text of [record]'s values; links are kept apart, as [links]. */
+private fun drafts(record: Record): Map<Long, String> =
+    record.values.filterValues { it !is LinkValue }.mapValues { (_, v) -> FieldValues.toDraft(v) }
+
+private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> =
+    fields.filter { it.type == FieldType.LINK }.associate { it.id to record.values[it.id] as? LinkValue }

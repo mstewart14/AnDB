@@ -37,6 +37,7 @@ import ca.stewartclan.andb.data.FieldProps
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdProps
 import ca.stewartclan.andb.data.LinkProps
+import ca.stewartclan.andb.data.LinkedProps
 import ca.stewartclan.andb.data.ListProps
 import ca.stewartclan.andb.ui.common.NameField
 import ca.stewartclan.andb.ui.common.NameProblem
@@ -44,6 +45,8 @@ import ca.stewartclan.andb.ui.common.rememberNameState
 
 /** What the List editor needs for choosing a lookup source. */
 class LookupContext(
+    /** The fields of the database being designed. */
+    val currentFields: List<FieldDef>,
     val databases: List<DatabaseSummary>,
     val info: LookupInfo,
     val onChange: (String?, Long?) -> Unit,
@@ -104,6 +107,7 @@ class FieldDraft(
     idDraft: MutableState<IdDraft>,
     listDraft: MutableState<ListDraft>,
     linkDraft: MutableState<LinkDraft>,
+    linkedDraft: MutableState<LinkedProps>,
     required: MutableState<Boolean>
 ) {
     var name by name
@@ -111,6 +115,7 @@ class FieldDraft(
     var idDraft by idDraft
     var listDraft by listDraft
     var linkDraft by linkDraft
+    var linkedDraft by linkedDraft
     var required by required
 
     /** The field as entered (id and position unset), or null while a setting is invalid. */
@@ -119,6 +124,8 @@ class FieldDraft(
             FieldType.ID -> idDraft.toProps()
             FieldType.LIST -> listDraft.toProps()
             FieldType.LINK -> linkDraft.toProps()
+            // A Linked field needs the link it shows through.
+            FieldType.LINKED -> linkedDraft.takeIf { it.linkFieldId != 0L }
             else -> FieldProps.default(type)
         }
         return props?.let { FieldDef(0, 0, name.text, type, it, required && type.canBeRequired) }
@@ -138,8 +145,11 @@ private fun rememberFieldDraft(field: FieldDef?): FieldDraft {
     val linkDraft = rememberSaveable(stateSaver = LinkDraft.Saver) {
         mutableStateOf((field?.props as? LinkProps)?.let(LinkDraft::of) ?: LinkDraft())
     }
+    val linkedDraft = rememberSaveable(stateSaver = LinkedPropsSaver) {
+        mutableStateOf(field?.props as? LinkedProps ?: LinkedProps())
+    }
     val required = rememberSaveable { mutableStateOf(field?.required ?: false) }
-    return remember { FieldDraft(name, type, idDraft, listDraft, linkDraft, required) }
+    return remember { FieldDraft(name, type, idDraft, listDraft, linkDraft, linkedDraft, required) }
 }
 
 /** The settings of the draft's type, and the Required switch where it applies. */
@@ -149,6 +159,7 @@ private fun FieldSettings(draft: FieldDraft, lookup: LookupContext, editingField
         FieldType.ID -> IdPropsEditor(draft.idDraft, { draft.idDraft = it }, modifier)
         FieldType.LIST -> ListPropsEditor(draft.listDraft, { draft.listDraft = it }, lookup, editingFieldId, modifier)
         FieldType.LINK -> LinkPropsEditor(draft.linkDraft, { draft.linkDraft = it }, lookup, modifier)
+        FieldType.LINKED -> LinkedPropsEditor(draft.linkedDraft, { draft.linkedDraft = it }, lookup, modifier)
         else -> Unit
     }
     if (draft.type.canBeRequired) {

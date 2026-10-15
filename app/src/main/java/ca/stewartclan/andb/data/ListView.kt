@@ -39,7 +39,7 @@ data class SortKey(val fieldId: Long, val descending: Boolean = false, val caseS
 
 /** Whether field [this] can be a list column: it shows something per record. */
 val FieldDef.canBeColumn: Boolean
-    get() = type != FieldType.SECTION && type != FieldType.LINKED
+    get() = type != FieldType.SECTION
 
-/** Whether records can be sorted by field [this]. */
-val FieldDef.canSort: Boolean get() = canBeColumn
+/** Whether records can be sorted by field [this]; not by Linked fields, whose values live elsewhere. */
+val FieldDef.canSort: Boolean get() = canBeColumn && type != FieldType.LINKED

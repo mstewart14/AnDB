@@ -10,8 +10,10 @@ import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
+import ca.stewartclan.andb.data.LinkedProps
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
+import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -88,8 +90,21 @@ class DesignViewModel(private val repository: DatabaseRepository, val databaseId
         repository.deleteField(databaseId, field.id)
     }
 
+    private val _linkedTargets = MutableStateFlow<Map<Long, String>>(emptyMap())
+
+    /** For each Linked field, the name of the field it shows (in the linked database). */
+    val linkedTargets: StateFlow<Map<Long, String>> = _linkedTargets.asStateFlow()
+
     private suspend fun reload() {
-        _fields.value = repository.fields(databaseId)
+        val fields = repository.fields(databaseId)
+        _fields.value = fields
+        val byId = fields.associateBy { it.id }
+        _linkedTargets.value = fields.mapNotNull { field ->
+            val props = field.props as? LinkedProps ?: return@mapNotNull null
+            val target = byId[props.linkFieldId]?.recordLink?.databaseId ?: return@mapNotNull null
+            val targetFields = runCatching { repository.fields(target) }.getOrNull() ?: return@mapNotNull null
+            RecordTitles.displayField(targetFields, props.targetFieldId)?.let { field.id to it.name }
+        }.toMap()
     }
 
     /** Applies a change, then reloads the fields whether or not it succeeded. */

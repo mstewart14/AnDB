@@ -252,4 +252,30 @@ class RecordRepositoryTest {
         repository.updateField(books, author.copy(props = LinkProps(LinkSource.RECORD, books)))
         assertNull(records.record(books, book)!!.values[author.id])
     }
+
+    @Test
+    fun backlinksListEveryLinkFieldIntoTheDatabaseWithTheRecordsLinkingHere() = runBlocking {
+        val authors = repository.create("Authors")
+        val name = repository.addField(authors, "Name", FieldType.STRING)
+        val leGuin = records.insert(authors, mapOf(name.id to "Le Guin"), emptyMap())
+        val banks = records.insert(authors, mapOf(name.id to "Banks"), emptyMap())
+        val books = repository.create("Books")
+        val author = repository.addField(books, "Author", FieldType.LINK, LinkProps(LinkSource.RECORD, authors))
+        val editor = repository.addField(books, "Editor", FieldType.LINK, LinkProps(LinkSource.RECORD, authors))
+        val toLeGuin = mapOf(author.id to LinkValue(RecordRef(authors, leGuin).uri, "Le Guin", null))
+        val b1 = records.insert(books, toLeGuin, emptyMap())
+        val b2 = records.insert(books, toLeGuin, emptyMap())
+
+        val groups = records.backlinks(authors, leGuin)
+        assertEquals(
+            listOf("Author" to listOf(b1, b2), "Editor" to emptyList()),
+            groups.map {
+                it.field.name to
+                    it.recordIds
+            }
+        )
+        assertEquals(setOf("Books"), groups.map { it.databaseName }.toSet())
+        assertEquals(listOf(emptyList<Long>(), emptyList()), records.backlinks(authors, banks).map { it.recordIds })
+        assertEquals(emptyList<Backlinks>(), records.backlinks(books, b1))
+    }
 }

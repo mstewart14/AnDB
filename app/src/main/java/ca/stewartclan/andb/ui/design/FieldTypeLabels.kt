@@ -4,8 +4,8 @@ import androidx.annotation.StringRes
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldType
 
-/** Types offered in the type picker. Linked waits for links to records. */
-val designableTypes: List<FieldType> = FieldType.entries - FieldType.LINKED
+/** Types offered in the type picker. */
+val designableTypes: List<FieldType> = FieldType.entries
 
 @get:StringRes
 val FieldType.labelRes: Int

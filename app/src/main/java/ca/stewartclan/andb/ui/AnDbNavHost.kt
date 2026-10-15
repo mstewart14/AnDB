@@ -14,6 +14,7 @@ import ca.stewartclan.andb.ui.list.RecordListRoute
 import ca.stewartclan.andb.ui.list.RecordListScreen
 import ca.stewartclan.andb.ui.list.ViewEditorRoute
 import ca.stewartclan.andb.ui.list.ViewEditorScreen
+import ca.stewartclan.andb.ui.record.NEW_RECORD_ID
 import ca.stewartclan.andb.ui.record.RecordRoute
 import ca.stewartclan.andb.ui.record.RecordScreen
 
@@ -46,7 +47,10 @@ fun AnDbNavHost() {
         composable<RecordRoute> {
             RecordScreen(
                 onBack = back,
-                onOpenRecord = { db, record -> navController.navigate(RecordRoute(db, record)) }
+                onOpenRecord = { db, record -> navController.navigate(RecordRoute(db, record)) },
+                onAddLinkedRecord = { db, field, uri ->
+                    navController.navigate(RecordRoute(db, NEW_RECORD_ID, field, uri))
+                }
             )
         }
         composable<DesignRoute> { DesignScreen(onBack = back) }

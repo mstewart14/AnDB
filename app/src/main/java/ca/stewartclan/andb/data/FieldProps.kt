@@ -17,6 +17,7 @@ sealed interface FieldProps {
             FieldType.ID -> IdProps()
             FieldType.LIST -> ListProps()
             FieldType.LINK -> LinkProps()
+            FieldType.LINKED -> LinkedProps()
             else -> NoProps
         }
 
@@ -24,6 +25,7 @@ sealed interface FieldProps {
             FieldType.ID -> json.decodeFromString(IdProps.serializer(), text)
             FieldType.LIST -> json.decodeFromString(ListProps.serializer(), text)
             FieldType.LINK -> json.decodeFromString(LinkProps.serializer(), text)
+            FieldType.LINKED -> json.decodeFromString(LinkedProps.serializer(), text)
             else -> NoProps
         }
 
@@ -31,6 +33,7 @@ sealed interface FieldProps {
             is IdProps -> json.encodeToString(IdProps.serializer(), props)
             is ListProps -> json.encodeToString(ListProps.serializer(), props)
             is LinkProps -> json.encodeToString(LinkProps.serializer(), props)
+            is LinkedProps -> json.encodeToString(LinkedProps.serializer(), props)
             NoProps -> "{}"
         }
     }
@@ -122,3 +125,10 @@ data class RecordRef(val databaseId: String, val recordId: Long) {
         }
     }
 }
+
+/**
+ * Settings of a Linked field: it shows field [targetFieldId] (the linked database's display field
+ * when null) of the record linked through this database's record Link field [linkFieldId].
+ */
+@Serializable
+data class LinkedProps(val linkFieldId: Long = 0, val targetFieldId: Long? = null) : FieldProps

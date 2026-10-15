@@ -119,5 +119,5 @@ val FieldDef.valueKind: ValueKind
         else -> ValueKind.TEXT
     }
 
-/** Whether records can be filtered by field [this]. */
-val FieldDef.canFilter: Boolean get() = canBeColumn
+/** Whether records can be filtered by field [this]; not by Linked fields, whose values live elsewhere. */
+val FieldDef.canFilter: Boolean get() = canSort

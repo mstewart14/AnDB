@@ -236,4 +236,17 @@
     <string name="record_link_choose">Choose record</string>
     <string name="record_link_deleted">Linked record deleted</string>
     <string name="record_link_none_to_choose">That database has no records yet.</string>
+
+    <string name="backlinks_title">Linked from</string>
+    <string name="backlinks_group">%1$s \u00b7 %2$s (%3$d)</string>
+    <string name="backlinks_add">Add</string>
+    <plurals name="record_delete_linked">
+        <item quantity="one">%1$d record links to this one; its link will show this record as deleted.</item>
+        <item quantity="other">%1$d records link to this one; their links will show this record as deleted.</item>
+    </plurals>
+    <string name="field_linked_explained">Shows a field of the record linked through one of this database\u2019s record links.</string>
+    <string name="field_linked_link">Through link</string>
+    <string name="field_linked_target">Show field</string>
+    <string name="field_linked_no_links">Add a Link field to records first.</string>
+    <string name="field_linked_summary">%1$s \u203a %2$s</string>
 </resources>

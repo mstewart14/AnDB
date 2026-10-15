@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -49,11 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
-import ca.stewartclan.andb.data.IdProps
-import ca.stewartclan.andb.data.LinkProps
-import ca.stewartclan.andb.data.LinkSource
 import ca.stewartclan.andb.data.ListProps
-import ca.stewartclan.andb.data.NoProps
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
 import ca.stewartclan.andb.ui.common.ReorderState
 import ca.stewartclan.andb.ui.common.dragToReorder
@@ -72,6 +67,7 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
     val database by viewModel.database.collectAsStateWithLifecycle()
     val fields by viewModel.fields.collectAsStateWithLifecycle()
     val databases by viewModel.databases.collectAsStateWithLifecycle()
+    val linkedTargets by viewModel.linkedTargets.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
@@ -84,7 +80,7 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
     DesignContent(
         databaseName = database?.name.orEmpty(),
         fields = fields,
-        databaseNames = databases.orEmpty().associate { it.id to it.name },
+        names = SummaryNames(databases.orEmpty().associate { it.id to it.name }, linkedTargets),
         snackbarHostState = snackbarHostState,
         onBack = onBack,
         onAdd = { editId = NEW_FIELD_ID },
@@ -127,7 +123,8 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
 private fun rememberLookupContext(viewModel: DesignViewModel): LookupContext {
     val databases by viewModel.databases.collectAsStateWithLifecycle()
     val info by viewModel.lookupInfo.collectAsStateWithLifecycle()
-    return LookupContext(databases.orEmpty(), info, viewModel::loadLookup, viewModel.databaseId)
+    val fields by viewModel.fields.collectAsStateWithLifecycle()
+    return LookupContext(fields.orEmpty(), databases.orEmpty(), info, viewModel::loadLookup, viewModel.databaseId)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,7 +132,7 @@ private fun rememberLookupContext(viewModel: DesignViewModel): LookupContext {
 fun DesignContent(
     databaseName: String,
     fields: List<FieldDef>?,
-    databaseNames: Map<String, String>,
+    names: SummaryNames,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onAdd: () -> Unit,
@@ -175,7 +172,7 @@ fun DesignContent(
         when {
             fields == null -> Unit
             fields.isEmpty() -> EmptyDesign(Modifier.padding(innerPadding))
-            else -> FieldList(fields, databaseNames, innerPadding, onEdit, onMove, onMoveTo, onDelete)
+            else -> FieldList(fields, names, innerPadding, onEdit, onMove, onMoveTo, onDelete)
         }
     }
 }
@@ -183,7 +180,7 @@ fun DesignContent(
 @Composable
 private fun FieldList(
     fields: List<FieldDef>,
-    databaseNames: Map<String, String>,
+    names: SummaryNames,
     contentPadding: PaddingValues,
     onEdit: (FieldDef) -> Unit,
     onMove: (FieldDef, Int) -> Unit,
@@ -225,7 +222,7 @@ private fun FieldList(
             Column(rowModifier) {
                 FieldRow(
                     field = field,
-                    summary = fieldSummary(field, databaseNames),
+                    summary = fieldSummary(field, fields, names),
                     dragHandle = {
                         Icon(
                             Icons.Filled.Menu,
@@ -243,37 +240,6 @@ private fun FieldList(
             }
         }
     }
-}
-
-/** The type line under a field's name, e.g. "ID · Short code" or "List · 3 items". */
-@Composable
-private fun fieldSummary(field: FieldDef, databaseNames: Map<String, String>): String {
-    val parts = mutableListOf(stringResource(field.type.labelRes))
-    when (val props = field.props) {
-        is IdProps -> parts += stringResource(props.kind.labelRes)
-        is ListProps -> parts += listSummary(props, databaseNames)
-        is LinkProps -> parts += linkSummary(props, databaseNames)
-        NoProps -> Unit
-    }
-    if (field.required) parts += stringResource(R.string.design_summary_required)
-    return parts.joinToString(" · ")
-}
-
-@Composable
-private fun listSummary(props: ListProps, databaseNames: Map<String, String>): List<String> {
-    val source = when (val lookup = props.lookup) {
-        null -> pluralStringResource(R.plurals.list_summary_items, props.items.size, props.items.size)
-        else -> databaseNames[lookup.databaseId]?.let { stringResource(R.string.list_summary_lookup, it) }
-            ?: stringResource(R.string.list_summary_lookup_missing)
-    }
-    return if (props.multiple) listOf(stringResource(R.string.list_summary_multiple), source) else listOf(source)
-}
-
-@Composable
-private fun linkSummary(props: LinkProps, databaseNames: Map<String, String>): String = when (props.source) {
-    LinkSource.PHOTO -> stringResource(R.string.link_source_photo)
-    LinkSource.RECORD -> databaseNames[props.databaseId]?.let { stringResource(R.string.link_record_summary, it) }
-        ?: stringResource(R.string.list_summary_lookup_missing)
 }
 
 @Composable
@@ -360,7 +326,7 @@ private fun DesignContentPreview() {
                 FieldDef(4, 3, "Rating", FieldType.RATING),
                 FieldDef(5, 4, "Genre", FieldType.LIST, ListProps(listOf("Fiction", "History", "Science"), true))
             ),
-            databaseNames = emptyMap(),
+            names = SummaryNames(emptyMap(), emptyMap()),
             snackbarHostState = remember { SnackbarHostState() },
             onBack = {},
             onAdd = {},

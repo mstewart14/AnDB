@@ -11,3 +11,6 @@ data class Record(
     val values: Map<Long, Any?>,
     val choices: Map<Long, List<String>>
 )
+
+/** Records [recordIds] of database [databaseId] whose Link [field] points at a given record. */
+data class Backlinks(val databaseId: String, val databaseName: String, val field: FieldDef, val recordIds: List<Long>)

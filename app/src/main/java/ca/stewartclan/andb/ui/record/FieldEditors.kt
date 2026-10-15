@@ -31,6 +31,7 @@ import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.LinkValue
+import ca.stewartclan.andb.data.LinkedProps
 import ca.stewartclan.andb.data.RecordRef
 
 /** The record being edited, whether it may be changed, and how to report changes. */
@@ -70,7 +71,8 @@ fun FieldEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier = Modifi
 private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val text = ctx.state.drafts[field.id].orEmpty()
     when (field.type) {
-        FieldType.SECTION, FieldType.ID, FieldType.CREATED, FieldType.MODIFIED -> ReadOnlyEditor(field, ctx, modifier)
+        FieldType.SECTION, FieldType.ID, FieldType.CREATED, FieldType.MODIFIED, FieldType.LINKED ->
+            ReadOnlyEditor(field, ctx, modifier)
         FieldType.BOOLEAN, FieldType.RATING, FieldType.SCALE, FieldType.DATE, FieldType.TIME ->
             ValueEditor(field, text, ctx, modifier)
         FieldType.LIST -> if (field.isMultiList) {
@@ -96,6 +98,7 @@ private fun ReadOnlyEditor(field: FieldDef, ctx: EditorContext, modifier: Modifi
         FieldType.SECTION -> SectionHeader(field.name, modifier)
         FieldType.CREATED -> ReadOnlyValue(field.name, FieldValues.timestamp(record.created), modifier)
         FieldType.MODIFIED -> ReadOnlyValue(field.name, FieldValues.timestamp(record.modified), modifier)
+        FieldType.LINKED -> ReadOnlyValue(field.name, linkedText(field, ctx.state), modifier)
         else -> ReadOnlyValue(field.name, FieldValues.display(field, record.values[field.id]), modifier)
     }
 }
@@ -182,3 +185,10 @@ private fun Context.startSafely(intent: Intent) {
 }
 
 private const val NOTE_LINES = 3
+
+/** What Linked [field] shows: its target field of the record linked through its Link field. */
+private fun linkedText(field: FieldDef, state: RecordUiState): String {
+    val props = field.props as? LinkedProps
+    val ref = props?.let { state.links[it.linkFieldId] }?.let { RecordRef.parse(it.uri) }
+    return ref?.let { state.linkedValues[field.id]?.get(it.recordId) }.orEmpty()
+}

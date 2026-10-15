@@ -1,6 +1,7 @@
 package ca.stewartclan.andb.data
 
 import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
 
 /** Records of AnDB databases. Changes go through [databases] so they're serialised with design changes. */
 class RecordRepository(private val databases: DatabaseRepository) {
@@ -110,6 +111,32 @@ class RecordRepository(private val databases: DatabaseRepository) {
             lookup == null -> props.items
             databases.databases.value.orEmpty().none { it.id == lookup.databaseId } -> emptyList()
             else -> databases.distinctValues(lookup.databaseId, lookup.fieldId)
+        }
+    }
+
+    /**
+     * The records linking to record [recordId] of database [id], grouped by database and Link field;
+     * every Link field into database [id] has a group, empty if nothing links here through it yet.
+     * Databases that can't be read are skipped.
+     */
+    suspend fun backlinks(id: String, recordId: Long): List<Backlinks> {
+        if (databases.databases.value == null) databases.refresh()
+        val uri = RecordRef(id, recordId).uri
+        return databases.databases.value.orEmpty().flatMap { db ->
+            try {
+                databases.read(db.id) {
+                    readFields().filter { it.recordLink?.databaseId == id }.map { field ->
+                        val column = DatabaseFile.columnName(field.id)
+                        val ids = rawQuery("SELECT _id FROM record WHERE $column = ? ORDER BY _id", arrayOf(uri))
+                            .use { c -> buildList { while (c.moveToNext()) add(c.getLong(0)) } }
+                        Backlinks(db.id, db.name, field, ids)
+                    }
+                }
+            } catch (_: SQLiteException) {
+                emptyList()
+            } catch (_: IllegalStateException) {
+                emptyList()
+            }
         }
     }
 
