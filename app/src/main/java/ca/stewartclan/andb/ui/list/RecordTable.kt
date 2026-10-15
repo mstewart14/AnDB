@@ -114,6 +114,7 @@ private fun Cell(cell: ListCell, width: Dp) {
             .height(ROW_HEIGHT)
             .padding(horizontal = CELL_PADDING)
     ) {
+        // A photo shows as just its thumbnail; its name only if there's no thumbnail to show.
         if (thumbnail != null) {
             Image(
                 thumbnail,
@@ -123,14 +124,9 @@ private fun Cell(cell: ListCell, width: Dp) {
                     .size(THUMBNAIL_SIZE)
                     .clip(RoundedCornerShape(4.dp))
             )
+        } else {
+            Text(cell.text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(
-            cell.text,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = if (thumbnail != null) 8.dp else 0.dp)
-        )
     }
 }
 
