@@ -72,4 +72,27 @@
     <string name="field_type_section">Section header</string>
     <string name="field_type_created">Created (timestamp)</string>
     <string name="field_type_modified">Modified (timestamp)</string>
+    <string name="field_type_id">ID</string>
+
+    <string name="id_kind_label">Kind of ID</string>
+    <string name="id_kind_increment">Increment (1, 2, 3…)</string>
+    <string name="id_kind_uuid_random">UUID, random</string>
+    <string name="id_kind_uuid_time">UUID, time-ordered</string>
+    <string name="id_kind_short_code">Short code</string>
+    <string name="id_start_label">Start at</string>
+    <string name="id_prefix_label">Prefix (optional)</string>
+    <string name="id_padding_label">Zero-pad to digits (0\u2013%1$d)</string>
+    <string name="id_example">Example: %1$s</string>
+    <plurals name="id_backfill_info">
+        <item quantity="one">The existing record will be given an ID.</item>
+        <item quantity="other">The %1$d existing records will be given IDs, oldest first.</item>
+    </plurals>
+    <plurals name="id_replace_warning">
+        <item quantity="one">The value in %1$d record will be replaced with a new ID.</item>
+        <item quantity="other">Values in %1$d records will be replaced with new IDs.</item>
+    </plurals>
+    <plurals name="id_regenerate_warning">
+        <item quantity="one">The ID of %1$d record will be regenerated.</item>
+        <item quantity="other">All %1$d IDs will be regenerated.</item>
+    </plurals>
 </resources>

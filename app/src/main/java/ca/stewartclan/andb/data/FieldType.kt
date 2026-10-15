@@ -6,6 +6,9 @@ enum class Storage(val sqlType: String?) {
     INTEGER("INTEGER"),
     REAL("REAL"),
 
+    /** BLOB affinity: SQLite keeps each value as written, so an ID column holds numbers or text. */
+    ANY("BLOB"),
+
     /** The field has no column: it is computed or purely presentational. */
     NONE(null)
 }
@@ -32,10 +35,18 @@ enum class FieldType(val code: String, val storage: Storage) {
     SCALE("scale", Storage.INTEGER),
     SECTION("section", Storage.NONE),
     CREATED("created", Storage.NONE),
-    MODIFIED("modified", Storage.NONE);
+    MODIFIED("modified", Storage.NONE),
+    ID("id", Storage.ANY);
 
-    /** Whether a field changed from this type to [other] keeps its stored values as they are. */
-    fun keepsValuesAs(other: FieldType): Boolean = storage == Storage.NONE || storage == other.storage
+    /**
+     * Whether a field changed from this type to [other] keeps its stored values as they are.
+     * Becoming an ID replaces every value with a generated one.
+     */
+    fun keepsValuesAs(other: FieldType): Boolean = when {
+        storage == Storage.NONE -> true
+        other == ID -> this == ID
+        else -> storage == other.storage
+    }
 
     companion object {
         private val byCode = entries.associateBy { it.code }

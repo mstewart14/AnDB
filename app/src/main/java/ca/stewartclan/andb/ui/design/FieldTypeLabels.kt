@@ -29,4 +29,5 @@ val FieldType.labelRes: Int
         FieldType.SECTION -> R.string.field_type_section
         FieldType.CREATED -> R.string.field_type_created
         FieldType.MODIFIED -> R.string.field_type_modified
+        FieldType.ID -> R.string.field_type_id
     }

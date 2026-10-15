@@ -10,6 +10,7 @@ import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
+import ca.stewartclan.andb.data.FieldProps
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
@@ -43,13 +44,14 @@ class DesignViewModel(private val repository: DatabaseRepository, private val da
     fun checkName(name: String, editing: FieldDef? = null): NameProblem =
         NameValidator.check(name, fields.value.orEmpty().map { it.name }, editing?.name)
 
-    fun addField(name: String, type: FieldType) = change {
-        repository.addField(databaseId, name.trim(), type)
+    fun addField(name: String, type: FieldType, props: FieldProps) = change {
+        repository.addField(databaseId, name.trim(), type, props)
     }
 
-    fun updateField(field: FieldDef, name: String, type: FieldType) = change {
-        if (name.trim() != field.name) repository.renameField(databaseId, field.id, name.trim())
-        if (type != field.type) repository.changeFieldType(databaseId, field.id, type)
+    fun updateField(field: FieldDef, name: String, type: FieldType, props: FieldProps) = change {
+        if (name.trim() != field.name || type != field.type || props != field.props) {
+            repository.updateField(databaseId, field.id, name.trim(), type, props)
+        }
     }
 
     /** Moves [field] [by] places in display order (negative is up). */

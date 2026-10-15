@@ -28,5 +28,8 @@ class FieldTypeTest {
         assertTrue(FieldType.SECTION.keepsValuesAs(FieldType.FLOAT))
         assertFalse(FieldType.STRING.keepsValuesAs(FieldType.INTEGER))
         assertFalse(FieldType.FLOAT.keepsValuesAs(FieldType.SECTION))
+        assertFalse(FieldType.STRING.keepsValuesAs(FieldType.ID))
+        assertTrue(FieldType.SECTION.keepsValuesAs(FieldType.ID))
+        assertTrue(FieldType.ID.keepsValuesAs(FieldType.ID))
     }
 }

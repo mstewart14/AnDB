@@ -8,10 +8,10 @@ import java.io.File
  * On-disk layout of one AnDB database: a single SQLite file holding the user's records plus the
  * metadata describing them.
  *
- * - `andb_meta`: key/value properties of the database (display name, creation time).
- * - `andb_field`: one row per user-defined field, in display order.
+ * - `andb_meta`: key/value properties of the database (display name, creation time, ID counters).
+ * - `andb_field`: one row per user-defined field, in display order, with its [FieldProps] as JSON.
  * - `record`: one row per record. Each field with storage gets a column named `f<field id>`, so
- *   renaming a field never touches the record table.
+ *   renaming a field never touches the record table. ID columns have a unique index `u_f<field id>`.
  */
 internal object DatabaseFile {
     const val EXTENSION = "db"
@@ -29,6 +29,9 @@ internal object DatabaseFile {
     const val SYSTEM_COLUMNS_DDL = "_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL"
 
     fun columnName(fieldId: Long) = "f$fieldId"
+
+    /** `andb_meta` key holding the next value of an increment ID field. */
+    fun nextIdKey(fieldId: Long) = "next_id.$fieldId"
 
     fun open(file: File): SQLiteDatabase {
         val db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
@@ -78,8 +81,11 @@ internal fun SQLiteDatabase.setMeta(key: String, value: String) {
 internal fun SQLiteDatabase.longQuery(sql: String, vararg args: String): Long =
     rawQuery(sql, args).use { if (it.moveToFirst()) it.getLong(0) else 0 }
 
-/** A field column of the rebuilt record table, filled from [source], an SQL expression over the old table. */
-internal data class RecordColumn(val name: String, val sqlType: String, val source: String)
+/**
+ * A field column of the rebuilt record table, filled from [source], an SQL expression over the old
+ * table. [unique] columns get a unique index.
+ */
+internal data class RecordColumn(val name: String, val sqlType: String, val source: String, val unique: Boolean)
 
 /**
  * Recreates `record` with the system columns plus [columns], copying every row. Needed to drop or
@@ -96,22 +102,34 @@ internal fun SQLiteDatabase.rebuildRecordTable(columns: List<RecordColumn>) {
     )
     execSQL("DROP TABLE record")
     execSQL("ALTER TABLE record_new RENAME TO record")
+    columns.filter { it.unique }.forEach { createUniqueIndex(it.name) }
+}
+
+internal fun SQLiteDatabase.createUniqueIndex(column: String) {
+    execSQL("CREATE UNIQUE INDEX IF NOT EXISTS u_$column ON record ($column)")
+}
+
+internal fun SQLiteDatabase.deleteMeta(key: String) {
+    execSQL("DELETE FROM andb_meta WHERE key = ?", arrayOf(key))
 }
 
 internal fun SQLiteDatabase.readFields(): List<FieldDef> =
-    rawQuery("SELECT id, position, name, type FROM andb_field ORDER BY position", null).use { c ->
+    rawQuery("SELECT id, position, name, type, props FROM andb_field ORDER BY position", null).use { c ->
         val id = c.getColumnIndexOrThrow("id")
         val position = c.getColumnIndexOrThrow("position")
         val name = c.getColumnIndexOrThrow("name")
         val type = c.getColumnIndexOrThrow("type")
+        val props = c.getColumnIndexOrThrow("props")
         buildList {
             while (c.moveToNext()) {
+                val fieldType = FieldType.fromCode(c.getString(type))
                 add(
                     FieldDef(
                         c.getLong(id),
                         c.getInt(position),
                         c.getString(name),
-                        FieldType.fromCode(c.getString(type))
+                        fieldType,
+                        FieldProps.decode(fieldType, c.getString(props))
                     )
                 )
             }
@@ -125,7 +143,7 @@ internal fun recordColumns(
 ): List<RecordColumn> = fields.mapNotNull { field ->
     field.type.storage.sqlType?.let { sqlType ->
         val name = DatabaseFile.columnName(field.id)
-        RecordColumn(name, sqlType, source(field, name))
+        RecordColumn(name, sqlType, source(field, name), unique = field.type == FieldType.ID)
     }
 }
 

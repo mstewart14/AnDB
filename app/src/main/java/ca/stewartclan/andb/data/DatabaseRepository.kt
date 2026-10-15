@@ -19,7 +19,13 @@ import kotlinx.coroutines.withContext
 /** A database as shown in the chooser. [id] is the file's base name and never changes. */
 data class DatabaseSummary(val id: String, val name: String, val recordCount: Long, val fieldCount: Long)
 
-data class FieldDef(val id: Long, val position: Int, val name: String, val type: FieldType)
+data class FieldDef(
+    val id: Long,
+    val position: Int,
+    val name: String,
+    val type: FieldType,
+    val props: FieldProps = FieldProps.default(type)
+)
 
 /**
  * All AnDB databases, one SQLite file each in [dir]. The chooser list is whatever files are in the
@@ -28,7 +34,8 @@ data class FieldDef(val id: Long, val position: Int, val name: String, val type:
 class DatabaseRepository(
     private val dir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val clock: () -> Instant = Instant::now
+    private val clock: () -> Instant = Instant::now,
+    private val idGenerator: IdGenerator = IdGenerator()
 ) {
     private val writeLock = Mutex()
     private val _databases = MutableStateFlow<List<DatabaseSummary>?>(null)
@@ -63,62 +70,60 @@ class DatabaseRepository(
         withDatabase(id) { readFields() }
     }
 
-    /** Appends a field after the existing ones, adding its record column if it has storage. */
-    suspend fun addField(id: String, name: String, type: FieldType): FieldDef = mutate {
+    /**
+     * Appends a field after the existing ones, adding its record column if it has storage. A new
+     * ID field gives every existing record an ID.
+     */
+    suspend fun addField(
+        id: String,
+        name: String,
+        type: FieldType,
+        props: FieldProps = FieldProps.default(type)
+    ): FieldDef = mutate {
         withDatabase(id) {
             transaction {
                 val position = longQuery("SELECT COALESCE(MAX(position) + 1, 0) FROM andb_field").toInt()
                 execSQL(
-                    "INSERT INTO andb_field (position, name, type) VALUES (?, ?, ?)",
-                    arrayOf(position, name, type.code)
+                    "INSERT INTO andb_field (position, name, type, props) VALUES (?, ?, ?, ?)",
+                    arrayOf(position, name, type.code, FieldProps.encode(props))
                 )
-                val fieldId = longQuery("SELECT last_insert_rowid()")
-                type.storage.sqlType?.let { sqlType ->
-                    execSQL("ALTER TABLE record ADD COLUMN ${DatabaseFile.columnName(fieldId)} $sqlType")
-                }
-                FieldDef(fieldId, position, name, type)
+                val field = FieldDef(longQuery("SELECT last_insert_rowid()"), position, name, type, props)
+                addColumn(field)
+                field
             }
         }
     }
 
-    suspend fun renameField(id: String, fieldId: Long, name: String) = mutate {
-        withDatabase(id) {
-            execSQL("UPDATE andb_field SET name = ? WHERE id = ?", arrayOf(name, fieldId))
-        }
-    }
-
     /**
-     * Changes a field's type. Values are kept when the storage class is unchanged, converted with
-     * SQL `CAST` when it differs (so text that isn't a number becomes 0), and dropped when the new
-     * type has no storage.
+     * Changes a field's name, type and settings. When the storage class changes, values are
+     * converted with SQL `CAST` (so text that isn't a number becomes 0), or dropped when the new
+     * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID.
      */
-    suspend fun changeFieldType(id: String, fieldId: Long, type: FieldType) = mutate {
+    suspend fun updateField(id: String, fieldId: Long, name: String, type: FieldType, props: FieldProps) = mutate {
         withDatabase(id) {
             transaction {
                 val fields = readFields()
                 val old = fields.first { it.id == fieldId }
-                execSQL("UPDATE andb_field SET type = ? WHERE id = ?", arrayOf(type.code, fieldId))
-                val column = DatabaseFile.columnName(fieldId)
-                val newSqlType = type.storage.sqlType
+                val new = old.copy(name = name, type = type, props = props)
+                execSQL(
+                    "UPDATE andb_field SET name = ?, type = ?, props = ? WHERE id = ?",
+                    arrayOf(name, type.code, FieldProps.encode(props), fieldId)
+                )
                 when {
                     old.type.storage == type.storage -> Unit
-                    old.type.storage == Storage.NONE -> execSQL("ALTER TABLE record ADD COLUMN $column $newSqlType")
+                    old.type.storage == Storage.NONE -> addColumn(new)
                     else -> rebuildRecordTable(
-                        recordColumns(
-                            fields.map {
-                                if (it.id ==
-                                    fieldId
-                                ) {
-                                    it.copy(type = type)
-                                } else {
-                                    it
-                                }
+                        recordColumns(fields.map { if (it.id == fieldId) new else it }) { field, column ->
+                            when {
+                                field.id != fieldId -> column
+                                type == FieldType.ID -> "NULL"
+                                else -> "CAST($column AS ${type.storage.sqlType})"
                             }
-                        ) { field, name ->
-                            if (field.id == fieldId) "CAST($name AS $newSqlType)" else name
                         }
                     )
                 }
+                if (type == FieldType.ID) updateIds(old, new)
+                if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(fieldId))
             }
         }
     }
@@ -142,6 +147,7 @@ class DatabaseRepository(
                 val fields = readFields()
                 val field = fields.first { it.id == fieldId }
                 execSQL("DELETE FROM andb_field WHERE id = ?", arrayOf(fieldId))
+                deleteMeta(DatabaseFile.nextIdKey(fieldId))
                 val remaining = fields - field
                 writePositions(remaining.map { it.id })
                 if (field.type.storage != Storage.NONE) {
@@ -149,6 +155,55 @@ class DatabaseRepository(
                 }
             }
         }
+    }
+
+    /** Adds an empty record, assigning its ID fields, and returns its record id. */
+    suspend fun createRecord(id: String): Long = mutate {
+        withDatabase(id) {
+            transaction {
+                val now = clock().toString()
+                execSQL("INSERT INTO record (_created, _modified) VALUES (?, ?)", arrayOf(now, now))
+                val recordId = longQuery("SELECT last_insert_rowid()")
+                readFields().filter { it.type == FieldType.ID }.forEach { field ->
+                    execSQL(
+                        "UPDATE record SET ${DatabaseFile.columnName(field.id)} = ? WHERE _id = ?",
+                        arrayOf(nextIdValue(field, idGenerator), recordId)
+                    )
+                }
+                recordId
+            }
+        }
+    }
+
+    /** Adds the record column for a new or newly stored [field]. */
+    private fun SQLiteDatabase.addColumn(field: FieldDef) {
+        val sqlType = field.type.storage.sqlType ?: return
+        val column = DatabaseFile.columnName(field.id)
+        execSQL("ALTER TABLE record ADD COLUMN $column $sqlType")
+        if (field.type == FieldType.ID) {
+            createUniqueIndex(column)
+            backfillIds(field, idGenerator)
+        }
+    }
+
+    /**
+     * Brings ID field [new] up to date after an update from [old]. A field that just became an ID
+     * already has empty values (its column was added or rebuilt), so only a kind change clears them.
+     */
+    private fun SQLiteDatabase.updateIds(old: FieldDef, new: FieldDef) {
+        val props = new.props as IdProps
+        val oldProps = old.props as? IdProps
+        val column = DatabaseFile.columnName(new.id)
+        val key = DatabaseFile.nextIdKey(new.id)
+        if (oldProps != null && oldProps.kind != props.kind) {
+            execSQL("UPDATE record SET $column = NULL")
+            deleteMeta(key)
+        } else if (oldProps != null && props.start != oldProps.start) {
+            // Never move the counter back: numbers already handed out are not reused.
+            getMeta(key)?.toLong()?.let { next -> setMeta(key, maxOf(next, props.start).toString()) }
+        }
+        createUniqueIndex(column)
+        backfillIds(new, idGenerator)
     }
 
     private fun fileFor(id: String): File {

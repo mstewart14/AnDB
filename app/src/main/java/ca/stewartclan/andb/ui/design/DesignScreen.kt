@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -49,7 +51,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
+import ca.stewartclan.andb.data.FieldProps
 import ca.stewartclan.andb.data.FieldType
+import ca.stewartclan.andb.data.IdKind
+import ca.stewartclan.andb.data.IdProps
 import ca.stewartclan.andb.data.Storage
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
 import ca.stewartclan.andb.ui.common.NameField
@@ -95,8 +100,8 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
             field = null,
             recordCount = recordCount,
             check = viewModel::checkName,
-            onConfirm = { name, type ->
-                viewModel.addField(name, type)
+            onConfirm = { name, type, props ->
+                viewModel.addField(name, type, props)
                 editId = null
             },
             onDismiss = { editId = null }
@@ -109,8 +114,8 @@ fun DesignScreen(onBack: () -> Unit, viewModel: DesignViewModel = viewModel(fact
             field = field,
             recordCount = recordCount,
             check = { viewModel.checkName(it, editing = field) },
-            onConfirm = { name, type ->
-                viewModel.updateField(field, name, type)
+            onConfirm = { name, type, props ->
+                viewModel.updateField(field, name, type, props)
                 editId = null
             },
             onDismiss = { editId = null }
@@ -220,7 +225,11 @@ private fun FieldRow(
     ListItem(
         modifier = Modifier.clickable(onClick = onEdit),
         headlineContent = { Text(field.name) },
-        supportingContent = { Text(stringResource(field.type.labelRes)) },
+        supportingContent = {
+            val typeLabel = stringResource(field.type.labelRes)
+            val idProps = field.props as? IdProps
+            Text(if (idProps != null) "$typeLabel · ${stringResource(idProps.kind.labelRes)}" else typeLabel)
+        },
         trailingContent = {
             Box {
                 IconButton(onClick = { menuOpen = true }) {
@@ -256,7 +265,7 @@ private fun FieldRow(
     )
 }
 
-/** Adds a field when [field] is null, otherwise edits its name and type. */
+/** Adds a field when [field] is null, otherwise edits its name, type and settings. */
 @Composable
 private fun FieldDialog(
     title: String,
@@ -264,44 +273,70 @@ private fun FieldDialog(
     field: FieldDef?,
     recordCount: Long,
     check: (String) -> NameProblem,
-    onConfirm: (String, FieldType) -> Unit,
+    onConfirm: (String, FieldType, FieldProps) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by rememberNameState(field?.name.orEmpty())
     var type by rememberSaveable { mutableStateOf(field?.type ?: FieldType.STRING) }
+    var idDraft by rememberSaveable(stateSaver = IdDraft.Saver) {
+        mutableStateOf(IdDraft.of(field?.props as? IdProps ?: IdProps()))
+    }
     val problem = check(name.text)
-    val losesValues = field != null && recordCount > 0 && !field.type.keepsValuesAs(type)
+    // Null while a setting is invalid, which disables the confirm button.
+    val props: FieldProps? = if (type == FieldType.ID) idDraft.toProps() else FieldProps.default(type)
+    val canConfirm = problem == NameProblem.OK && props != null
+    val confirm = { if (problem == NameProblem.OK) props?.let { onConfirm(name.text, type, it) } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 NameField(
                     value = name,
                     onValueChange = { name = it },
                     problem = problem,
                     duplicateMessage = stringResource(R.string.design_name_duplicate),
-                    onDone = { onConfirm(name.text, type) },
+                    onDone = confirm,
                     modifier = Modifier.fillMaxWidth()
                 )
                 TypePicker(type, onTypeChange = { type = it }, modifier = Modifier.padding(top = 8.dp))
-                if (losesValues) {
-                    Text(
-                        pluralStringResource(R.plurals.design_type_change_warning, recordCount.toInt(), recordCount),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                if (type == FieldType.ID) {
+                    IdPropsEditor(idDraft, onDraftChange = { idDraft = it }, modifier = Modifier.padding(top = 8.dp))
                 }
+                ChangeWarning(field, type, idDraft.kind, recordCount)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name.text, type) }, enabled = problem == NameProblem.OK) {
+            TextButton(onClick = confirm, enabled = canConfirm) {
                 Text(confirmLabel)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+    )
+}
+
+/** Explains what saving will do to the values already in [recordCount] records, if anything. */
+@Composable
+private fun ChangeWarning(field: FieldDef?, type: FieldType, idKind: IdKind, recordCount: Long) {
+    if (recordCount == 0L) return
+    val count = recordCount.toInt()
+    val (message, isError) = when {
+        type == FieldType.ID && field == null ->
+            pluralStringResource(R.plurals.id_backfill_info, count, recordCount) to false
+        type == FieldType.ID && field?.type != FieldType.ID ->
+            pluralStringResource(R.plurals.id_replace_warning, count, recordCount) to true
+        type == FieldType.ID && (field?.props as? IdProps)?.kind != idKind ->
+            pluralStringResource(R.plurals.id_regenerate_warning, count, recordCount) to true
+        field != null && !field.type.keepsValuesAs(type) ->
+            pluralStringResource(R.plurals.design_type_change_warning, count, recordCount) to true
+        else -> return
+    }
+    Text(
+        message,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 8.dp)
     )
 }
 

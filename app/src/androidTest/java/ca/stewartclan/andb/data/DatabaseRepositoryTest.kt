@@ -1,9 +1,12 @@
 package ca.stewartclan.andb.data
 
+import android.database.DatabaseUtils
+import android.database.sqlite.SQLiteConstraintException
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -103,7 +106,7 @@ class DatabaseRepositoryTest {
         val b = repository.addField(id, "B", FieldType.STRING)
         val c = repository.addField(id, "C", FieldType.STRING)
 
-        repository.renameField(id, b.id, "Bee")
+        repository.updateField(id, b.id, "Bee", FieldType.STRING, NoProps)
         repository.moveField(id, c.id, 0)
 
         val fields = repository.fields(id)
@@ -139,8 +142,8 @@ class DatabaseRepositoryTest {
         val note = repository.addField(id, "Note", FieldType.STRING)
         insertRecord(id, "f${pages.id}" to "412", "f${note.id}" to "Signed")
 
-        repository.changeFieldType(id, pages.id, FieldType.INTEGER)
-        repository.changeFieldType(id, note.id, FieldType.NOTE)
+        repository.updateField(id, pages.id, "Pages", FieldType.INTEGER, NoProps)
+        repository.updateField(id, note.id, "Note", FieldType.NOTE, NoProps)
 
         assertEquals(listOf(FieldType.INTEGER, FieldType.NOTE), repository.fields(id).map { it.type })
         assertEquals("INTEGER", recordColumns(id).toMap()["f${pages.id}"])
@@ -160,11 +163,139 @@ class DatabaseRepositoryTest {
         val f = repository.addField(id, "Details", FieldType.SECTION)
         assertEquals(3, recordColumns(id).size)
 
-        repository.changeFieldType(id, f.id, FieldType.STRING)
+        repository.updateField(id, f.id, "Details", FieldType.STRING, NoProps)
         assertEquals("TEXT", recordColumns(id).toMap()["f${f.id}"])
 
-        repository.changeFieldType(id, f.id, FieldType.SECTION)
+        repository.updateField(id, f.id, "Details", FieldType.SECTION, NoProps)
         assertEquals(3, recordColumns(id).size)
+    }
+
+    @Test
+    fun newIdFieldNumbersExistingRecordsOldestFirst() = runBlocking {
+        val id = repository.create("Books")
+        repeat(3) { repository.createRecord(id) }
+        val f = repository.addField(id, "No.", FieldType.ID, IdProps(start = 100))
+
+        assertEquals(listOf("100", "101", "102"), column(id, "f${f.id}"))
+        assertEquals(listOf("integer"), column(id, "DISTINCT typeof(f${f.id})"))
+        val next = repository.createRecord(id)
+        assertEquals("103", value(id, "f${f.id}", next))
+    }
+
+    @Test
+    fun incrementNeverReusesNumbers() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "No.", FieldType.ID)
+        repository.createRecord(id)
+        val second = repository.createRecord(id)
+        openRaw(id).use { it.execSQL("DELETE FROM record WHERE _id = $second") }
+
+        val third = repository.createRecord(id)
+        assertEquals("3", value(id, "f${f.id}", third))
+    }
+
+    @Test
+    fun raisingStartMovesCounterButLoweringDoesNot() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "No.", FieldType.ID)
+        repository.createRecord(id)
+
+        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 500))
+        assertEquals("500", value(id, "f${f.id}", repository.createRecord(id)))
+        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(start = 1))
+        assertEquals("501", value(id, "f${f.id}", repository.createRecord(id)))
+    }
+
+    @Test
+    fun otherKindsGenerateTheirFormats() = runBlocking {
+        val id = repository.create("Books")
+        val v4 = repository.addField(id, "A", FieldType.ID, IdProps(IdKind.UUID_RANDOM))
+        val v7 = repository.addField(id, "B", FieldType.ID, IdProps(IdKind.UUID_TIME))
+        val code = repository.addField(id, "C", FieldType.ID, IdProps(IdKind.SHORT_CODE))
+        val record = repository.createRecord(id)
+
+        assertEquals(4, UUID.fromString(value(id, "f${v4.id}", record)).version())
+        assertEquals(7, UUID.fromString(value(id, "f${v7.id}", record)).version())
+        assertTrue(Regex("[A-Z2-9]{4}-[A-Z2-9]{4}").matches(value(id, "f${code.id}", record)))
+    }
+
+    @Test
+    fun changingKindRegeneratesEveryId() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "No.", FieldType.ID)
+        repeat(3) { repository.createRecord(id) }
+
+        repository.updateField(id, f.id, "No.", FieldType.ID, IdProps(IdKind.SHORT_CODE))
+
+        val codes = column(id, "f${f.id}")
+        assertEquals(3, codes.toSet().size)
+        assertTrue(codes.all { Regex("[A-Z2-9]{4}-[A-Z2-9]{4}").matches(it) })
+        assertEquals(0L, metaCount(id, "next_id.${f.id}"))
+    }
+
+    @Test
+    fun textFieldBecomingIdGetsNewIds() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "Code", FieldType.STRING)
+        insertRecord(id, "f${f.id}" to "same")
+        insertRecord(id, "f${f.id}" to "same")
+
+        repository.updateField(id, f.id, "Code", FieldType.ID, IdProps())
+
+        assertEquals(listOf("1", "2"), column(id, "f${f.id}"))
+    }
+
+    @Test
+    fun idStaysUniqueThroughTableRebuild() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "No.", FieldType.ID)
+        val other = repository.addField(id, "Title", FieldType.STRING)
+        repository.createRecord(id)
+        repository.deleteField(id, other.id)
+
+        assertEquals(1L, indexCount(id, "u_f${f.id}"))
+        val duplicate = runCatching {
+            insertRecord(id, "f${f.id}" to 1)
+        }
+        assertTrue(duplicate.exceptionOrNull() is SQLiteConstraintException)
+    }
+
+    @Test
+    fun idStopsBeingIdWhenRetyped() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "No.", FieldType.ID)
+        repository.createRecord(id)
+
+        repository.updateField(id, f.id, "No.", FieldType.INTEGER, NoProps)
+
+        assertEquals(0L, indexCount(id, "u_f${f.id}"))
+        assertEquals(0L, metaCount(id, "next_id.${f.id}"))
+        assertEquals(listOf("1"), column(id, "f${f.id}"))
+    }
+
+    private fun column(id: String, expr: String): List<String> = openRaw(id).use { db ->
+        db.rawQuery("SELECT $expr FROM record ORDER BY _id", null).use { c ->
+            buildList { while (c.moveToNext()) add(c.getString(0)) }
+        }
+    }
+
+    private fun value(id: String, column: String, recordId: Long): String = openRaw(id).use { db ->
+        db.rawQuery("SELECT $column FROM record WHERE _id = $recordId", null).use { c ->
+            c.moveToFirst()
+            c.getString(0)
+        }
+    }
+
+    private fun indexCount(id: String, name: String): Long = openRaw(id).use { db ->
+        DatabaseUtils.longForQuery(
+            db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?",
+            arrayOf(name)
+        )
+    }
+
+    private fun metaCount(id: String, key: String): Long = openRaw(id).use { db ->
+        DatabaseUtils.longForQuery(db, "SELECT COUNT(*) FROM andb_meta WHERE key = ?", arrayOf(key))
     }
 
     private fun openRaw(id: String) =
