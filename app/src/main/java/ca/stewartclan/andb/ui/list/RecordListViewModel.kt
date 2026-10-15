@@ -24,6 +24,7 @@ import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.SortKey
 import ca.stewartclan.andb.data.ViewRepository
 import ca.stewartclan.andb.data.canBeColumn
+import ca.stewartclan.andb.data.csv.Csv
 import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
@@ -112,6 +113,32 @@ class RecordListViewModel(
 
     private var loaded: Loaded? = null
 
+    /** The records the list shows (after filter and Find), as exported. */
+    private var shown: List<Entry> = emptyList()
+
+    private val _exported = MutableStateFlow<Int?>(null)
+
+    /** How many records the last export wrote, until the screen has said so. */
+    val exported: StateFlow<Int?> = _exported.asStateFlow()
+
+    fun exportedShown() {
+        _exported.value = null
+    }
+
+    /**
+     * Writes the records the list shows, all their fields, as CSV through [write] (to the file the
+     * user chose).
+     */
+    fun exportCsv(write: suspend (String) -> Unit) = launchReporting {
+        val data = loaded ?: return@launchReporting
+        val fields = CsvValues.exported(data.fields)
+        val rows = listOf(fields.map { it.name }) + shown.map { entry ->
+            fields.map { CsvValues.export(it, entry.record, entry.texts[it.id].orEmpty()) }
+        }
+        write(Csv.write(rows))
+        _exported.value = shown.size
+    }
+
     /** Reloads everything; called whenever the list is shown, since records and design change elsewhere. */
     fun reload() = launchReporting { load(viewId = null) }
 
@@ -196,9 +223,10 @@ class RecordListViewModel(
         val query = find
         val matches = query?.matcher() ?: { true }
         val fieldsById = data.fields.associateBy { it.id }
-        val rows = data.entries.filter { entry ->
+        shown = data.entries.filter { entry ->
             data.filter?.let { FilterMatcher.matches(it, fieldsById, entry.record) } != false && matches(entry.texts)
-        }.map { it.row }
+        }
+        val rows = shown.map { it.row }
         browseOrder[databaseId] = rows.map { it.id }
         _state.value = ListUiState(
             views = data.views,

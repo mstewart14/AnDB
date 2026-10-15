@@ -278,4 +278,37 @@ class RecordRepositoryTest {
         assertEquals(listOf(emptyList<Long>(), emptyList()), records.backlinks(authors, banks).map { it.recordIds })
         assertEquals(emptyList<Backlinks>(), records.backlinks(books, b1))
     }
+
+    @Test
+    fun insertAllSkipsRowsThatCannotBeStored() = runBlocking {
+        val id = repository.create("Books")
+        val title = repository.addField(id, "Title", FieldType.STRING, required = true)
+        val no = repository.addField(id, "No.", FieldType.ID, IdProps(prefix = "B-"))
+        records.insert(id, mapOf(title.id to "Existing"), emptyMap())
+        val rows = listOf(
+            ImportRow(mapOf(title.id to "Dune", no.id to 10L), emptyMap()),
+            ImportRow(mapOf(title.id to null), emptyMap()),
+            ImportRow(mapOf(title.id to "Emma", no.id to 1L), emptyMap()),
+            ImportRow(mapOf(title.id to "Anathem"), emptyMap())
+        )
+
+        val outcome = records.insertAll(id, rows, keepIds = true)
+
+        assertEquals(2, outcome.imported)
+        assertEquals(mapOf(1 to RowProblem.REQUIRED_MISSING, 2 to RowProblem.DUPLICATE_ID), outcome.skipped)
+        val byTitle = records.records(id).associate { it.values[title.id] to it.values[no.id] }
+        assertEquals(mapOf("Existing" to 1L, "Dune" to 10L, "Anathem" to 11L), byTitle)
+        // The counter moved past the kept 10, so the next new record gets 12.
+        assertEquals(12L, records.record(id, records.insert(id, mapOf(title.id to "Next"), emptyMap()))!!.values[no.id])
+    }
+
+    @Test
+    fun insertAllRegeneratesIdsUnlessKept() = runBlocking {
+        val id = repository.create("Books")
+        val no = repository.addField(id, "No.", FieldType.ID)
+        val outcome = records.insertAll(id, listOf(ImportRow(mapOf(no.id to 99L), emptyMap())), keepIds = false)
+
+        assertEquals(1, outcome.imported)
+        assertEquals(listOf(1L), records.records(id).map { it.values[no.id] })
+    }
 }

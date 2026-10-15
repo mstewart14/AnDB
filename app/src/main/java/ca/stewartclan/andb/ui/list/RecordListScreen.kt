@@ -63,7 +63,7 @@ class ListActions(
     val onBack: () -> Unit,
     val onOpen: (Long) -> Unit,
     val onNew: () -> Unit,
-    val onEditDesign: () -> Unit,
+    val menu: MenuActions,
     /** Starts or changes a search; null ends it. */
     val onFind: (FindQuery?) -> Unit,
     val views: ViewActions,
@@ -87,6 +87,7 @@ fun RecordListScreen(
     onEditDesign: (databaseId: String) -> Unit,
     onEditView: (databaseId: String, viewId: Long) -> Unit,
     onEditFilter: (databaseId: String, filterId: Long) -> Unit,
+    onImportCsv: (databaseId: String, uri: String) -> Unit,
     viewModel: RecordListViewModel = viewModel(factory = RecordListViewModel.Factory)
 ) {
     val database by viewModel.database.collectAsStateWithLifecycle()
@@ -118,7 +119,13 @@ fun RecordListScreen(
             onBack = onBack,
             onOpen = { onOpenRecord(db, it) },
             onNew = { onOpenRecord(db, NEW_RECORD_ID) },
-            onEditDesign = { onEditDesign(db) },
+            menu = rememberMenuActions(
+                viewModel,
+                database?.name.orEmpty(),
+                snackbarHostState,
+                onEditDesign = { onEditDesign(db) },
+                onImportCsv = { onImportCsv(db, it) }
+            ),
             onFind = viewModel::setFind,
             views = ViewActions(
                 onSelect = viewModel::selectView,
@@ -135,19 +142,7 @@ fun RecordListScreen(
         state?.let { FilterDialog(it.filters, it.filter, filterActions, onClose = { choosingFilter = false }) }
     }
     if (confirmDeleteView) {
-        AlertDialog(
-            onDismissRequest = { confirmDeleteView = false },
-            title = { Text(stringResource(R.string.view_delete_title, state?.view?.name.orEmpty())) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteView()
-                    confirmDeleteView = false
-                }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDeleteView = false }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
+        DeleteViewDialog(state?.view?.name.orEmpty(), viewModel::deleteView, onClose = { confirmDeleteView = false })
     }
 }
 
@@ -287,7 +282,21 @@ private fun ListMenu(canDeleteView: Boolean, actions: ListActions) {
                 text = { Text(stringResource(R.string.list_edit_design)) },
                 onClick = {
                     open = false
-                    actions.onEditDesign()
+                    actions.menu.onEditDesign()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.csv_export)) },
+                onClick = {
+                    open = false
+                    actions.menu.onExportCsv()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.csv_import)) },
+                onClick = {
+                    open = false
+                    actions.menu.onImportCsv()
                 }
             )
             DropdownMenuItem(
@@ -325,4 +334,20 @@ private fun EmptyList(hasFields: Boolean, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(top = 8.dp)
         )
     }
+}
+
+/** [onConfirm] deletes the list view; [onClose] closes the dialog, after either button. */
+@Composable
+private fun DeleteViewDialog(name: String, onConfirm: () -> Unit, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.view_delete_title, name)) },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm()
+                onClose()
+            }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.action_cancel)) } }
+    )
 }

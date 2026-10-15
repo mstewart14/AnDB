@@ -265,4 +265,39 @@
     <string name="field_linked_target">Show field</string>
     <string name="field_linked_no_links">Add a Link field to records first.</string>
     <string name="field_linked_summary">%1$s \u203a %2$s</string>
+
+    <string name="csv_export">Export CSV\u2026</string>
+    <string name="csv_import">Import CSV\u2026</string>
+    <plurals name="csv_exported">
+        <item quantity="one">Exported %1$d record</item>
+        <item quantity="other">Exported %1$d records</item>
+    </plurals>
+    <string name="csv_import_title">Import CSV</string>
+    <string name="csv_import_go">Import</string>
+    <plurals name="csv_import_rows">
+        <item quantity="one">%1$d row to import</item>
+        <item quantity="other">%1$d rows to import</item>
+    </plurals>
+    <string name="csv_import_header">First row is column names</string>
+    <string name="csv_import_keep_ids">Keep IDs from the file</string>
+    <string name="csv_import_columns">Columns</string>
+    <string name="csv_import_skip">Skip</string>
+    <string name="csv_import_new_field">New text field</string>
+    <plurals name="csv_import_done">
+        <item quantity="one">Imported %1$d record</item>
+        <item quantity="other">Imported %1$d records</item>
+    </plurals>
+    <plurals name="csv_import_missing">
+        <item quantity="one">%1$d row skipped: a required field was empty.</item>
+        <item quantity="other">%1$d rows skipped: a required field was empty.</item>
+    </plurals>
+    <plurals name="csv_import_duplicate_ids">
+        <item quantity="one">%1$d row skipped: its ID is already in use.</item>
+        <item quantity="other">%1$d rows skipped: their IDs are already in use.</item>
+    </plurals>
+    <plurals name="csv_import_bad_values">
+        <item quantity="one">%1$d value couldn\u2019t be read and was left empty:</item>
+        <item quantity="other">%1$d values couldn\u2019t be read and were left empty:</item>
+    </plurals>
+    <string name="csv_import_bad_value">Row %1$d, %2$s: \u201c%3$s\u201d</string>
 </resources>

@@ -15,6 +15,7 @@ format and no code is derived from it.
 | List view | Records as a table with a header row; tap a header to sort (again to reverse). Named list views: columns (show all fields, or chosen ones in order, narrow/medium/wide) and sort levels (field, ascending/descending, case-sensitive). Find: case-sensitive, whole word, one field or all, on the text as shown. Saved named filters. Previous/next in the record view follows the list's order, filter and find. | Done |
 | Record view | One record, all fields, an input per type. Previous/next (buttons or swipe), protected mode (lock), + for a new record, duplicate, delete. Edits save on leaving the record. | Done |
 | Design view | One row per field: name, type, settings. Add, edit, delete; reorder by drag and drop or menu. Warns before changes that lose or convert values. | Done |
+| CSV | From the list menu. Export: the records the list shows (filter and Find), every field, as RFC 4180 UTF-8 with a byte-order mark; dates/times ISO, checkboxes yes/no, ratings as numbers, multiple choices joined by "; ". Import: first row as column names (optional); each column to a field of the same name, a new text field, or skipped; values converted per type (a Link by its record's title, matched once); optionally keep the file's IDs. A report gives rows imported, rows skipped (required field empty, ID taken) and unreadable values. | Done |
 
 ## Field types
 
@@ -57,8 +58,8 @@ Default values per field are still planned.
 
 - Enforced unique with a unique index on the column.
 - Adding an ID field to a database with records backfills them in creation order.
-- Duplicating a record assigns a new ID; CSV import will ask whether to keep or
-  regenerate IDs.
+- Duplicating a record assigns a new ID; CSV import asks whether to keep the
+  file's IDs (an increment's counter then moves past them) or assign new ones.
 - Changing the kind regenerates every ID, so it is a destructive change (warn).
 
 ### Lists

@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.data
 
+import android.database.sqlite.SQLiteConstraintException
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteException
 
@@ -37,6 +38,38 @@ class RecordRepository(private val databases: DatabaseRepository) {
             assignIds(fields, recordId)
             recordId
         }
+
+    /**
+     * Adds [rows] as new records in one go (as from a CSV file), skipping rows that can't be
+     * stored: a required field empty, or (with [keepIds]) an ID already in use. With [keepIds], ID
+     * values given in a row are kept and increment counters move past them; otherwise every
+     * record gets new IDs.
+     */
+    suspend fun insertAll(id: String, rows: List<ImportRow>, keepIds: Boolean): ImportOutcome = databases.write(id) {
+        val fields = readFields()
+        val now = databases.clock().toString()
+        val skipped = mutableMapOf<Int, RowProblem>()
+        rows.forEachIndexed { index, row ->
+            if (RequiredRule.missing(fields, row.values, row.choices).isNotEmpty()) {
+                skipped[index] = RowProblem.REQUIRED_MISSING
+                return@forEachIndexed
+            }
+            // A savepoint per row: a row that fails is undone without losing the others.
+            execSQL("SAVEPOINT import_row")
+            try {
+                execSQL("INSERT INTO record (_created, _modified) VALUES (?, ?)", arrayOf(now, now))
+                val recordId = longQuery("SELECT last_insert_rowid()")
+                writeValues(fields, recordId, row.values, row.choices, now)
+                assignIds(fields, recordId, if (keepIds) row.values else emptyMap())
+                execSQL("RELEASE import_row")
+            } catch (_: SQLiteConstraintException) {
+                execSQL("ROLLBACK TO import_row")
+                execSQL("RELEASE import_row")
+                skipped[index] = RowProblem.DUPLICATE_ID
+            }
+        }
+        ImportOutcome(rows.size - skipped.size, skipped)
+    }
 
     /** Adds an empty record; only possible while no field is required. */
     suspend fun create(id: String): Long = insert(id, emptyMap(), emptyMap())
@@ -145,12 +178,25 @@ class RecordRepository(private val databases: DatabaseRepository) {
         if (missing.isNotEmpty()) throw RequiredFieldsMissingException(missing.map { it.name })
     }
 
-    private fun SQLiteDatabase.assignIds(fields: List<FieldDef>, recordId: Long) {
+    /**
+     * Gives record [recordId] its IDs: the ones in [kept] where given (an increment's counter then
+     * moves past it), new ones otherwise.
+     */
+    private fun SQLiteDatabase.assignIds(fields: List<FieldDef>, recordId: Long, kept: Map<Long, Any?> = emptyMap()) {
         fields.filter { it.type == FieldType.ID }.forEach { field ->
+            val given = kept[field.id]
+            if (given is Long) keepIncrementCounterPast(field, given)
             execSQL(
                 "UPDATE record SET ${DatabaseFile.columnName(field.id)} = ? WHERE _id = ?",
-                arrayOf(nextIdValue(field, databases.idGenerator), recordId)
+                arrayOf(given ?: nextIdValue(field, databases.idGenerator), recordId)
             )
         }
+    }
+
+    private fun SQLiteDatabase.keepIncrementCounterPast(field: FieldDef, value: Long) {
+        val props = field.props as? IdProps ?: return
+        val key = DatabaseFile.nextIdKey(field.id)
+        val next = getMeta(key)?.toLong() ?: props.start
+        if (value >= next) setMeta(key, (value + 1).toString())
     }
 }

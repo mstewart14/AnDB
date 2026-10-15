@@ -8,6 +8,8 @@ import ca.stewartclan.andb.ui.chooser.ChooserRoute
 import ca.stewartclan.andb.ui.chooser.ChooserScreen
 import ca.stewartclan.andb.ui.design.DesignRoute
 import ca.stewartclan.andb.ui.design.DesignScreen
+import ca.stewartclan.andb.ui.list.CsvImportRoute
+import ca.stewartclan.andb.ui.list.CsvImportScreen
 import ca.stewartclan.andb.ui.list.FilterEditorRoute
 import ca.stewartclan.andb.ui.list.FilterEditorScreen
 import ca.stewartclan.andb.ui.list.RecordListRoute
@@ -39,9 +41,11 @@ fun AnDbNavHost() {
                 onOpenRecord = { db, record -> navController.navigate(RecordRoute(db, record)) },
                 onEditDesign = { navController.navigate(DesignRoute(it)) },
                 onEditView = { db, view -> navController.navigate(ViewEditorRoute(db, view)) },
-                onEditFilter = { db, filter -> navController.navigate(FilterEditorRoute(db, filter)) }
+                onEditFilter = { db, filter -> navController.navigate(FilterEditorRoute(db, filter)) },
+                onImportCsv = { db, uri -> navController.navigate(CsvImportRoute(db, uri)) }
             )
         }
+        composable<CsvImportRoute> { CsvImportScreen(onDone = back) }
         composable<FilterEditorRoute> { FilterEditorScreen(onDone = back) }
         composable<ViewEditorRoute> { ViewEditorScreen(onDone = back) }
         composable<RecordRoute> {

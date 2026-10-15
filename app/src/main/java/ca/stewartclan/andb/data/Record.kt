@@ -14,3 +14,12 @@ data class Record(
 
 /** Records [recordIds] of database [databaseId] whose Link [field] points at a given record. */
 data class Backlinks(val databaseId: String, val databaseName: String, val field: FieldDef, val recordIds: List<Long>)
+
+/** A record to import: values and choices as for [RecordRepository.insert]. */
+data class ImportRow(val values: Map<Long, Any?>, val choices: Map<Long, List<String>>)
+
+/** Why an imported row wasn't stored. */
+enum class RowProblem { REQUIRED_MISSING, DUPLICATE_ID }
+
+/** How an import went: how many rows were stored, and which (by index) were skipped and why. */
+data class ImportOutcome(val imported: Int, val skipped: Map<Int, RowProblem>)
