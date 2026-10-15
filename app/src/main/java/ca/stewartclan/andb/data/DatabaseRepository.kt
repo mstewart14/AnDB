@@ -110,6 +110,7 @@ class DatabaseRepository(
                 if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
                 if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
                 if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
+                updateLink(old, new)
                 if (type == FieldType.ID) updateIds(old, new, idGenerator)
                 if (old.type == FieldType.ID && type != FieldType.ID) deleteMeta(DatabaseFile.nextIdKey(new.id))
             }
@@ -137,6 +138,7 @@ class DatabaseRepository(
                 execSQL("DELETE FROM andb_field WHERE id = ?", arrayOf(fieldId))
                 deleteMeta(DatabaseFile.nextIdKey(fieldId))
                 execSQL("DROP TABLE IF EXISTS ${DatabaseFile.listTable(fieldId)}")
+                execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkTable(fieldId)}")
                 val remaining = fields - field
                 writePositions(remaining.map { it.id })
                 if (field.storage != Storage.NONE) {
@@ -157,6 +159,7 @@ class DatabaseRepository(
             val sql = when {
                 field == null -> null
                 field.isMultiList -> "SELECT DISTINCT value FROM ${DatabaseFile.listTable(fieldId)}"
+                field.type == FieldType.LINK -> "SELECT DISTINCT name FROM ${DatabaseFile.linkTable(fieldId)}"
                 field.storage == Storage.NONE -> null
                 else -> "SELECT DISTINCT $column FROM record WHERE $column IS NOT NULL AND $column != ''"
             }

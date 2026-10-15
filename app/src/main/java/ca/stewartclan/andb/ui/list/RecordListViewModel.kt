@@ -15,6 +15,7 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.Filter
 import ca.stewartclan.andb.data.FilterRepository
+import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.ListView
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
@@ -35,8 +36,11 @@ import kotlinx.serialization.json.Json
 /** A column of the list: [field] shown at [width]. */
 data class ListColumn(val field: FieldDef, val width: ColumnWidth)
 
-/** A record as a list row: one display text per column. */
-data class RecordRow(val id: Long, val cells: List<String>)
+/** What a list cell shows: text, and a thumbnail for photo links. */
+data class ListCell(val text: String, val thumbnail: ByteArray? = null)
+
+/** A record as a list row: one cell per column. */
+data class RecordRow(val id: Long, val cells: List<ListCell>)
 
 data class ListUiState(
     val views: List<ListView>,
@@ -150,7 +154,12 @@ class RecordListViewModel(
         val entries = records.records(databaseId, view.sort).map { record ->
             Entry(
                 record,
-                RecordRow(record.id, columns.map { shownText(it.field, record) }),
+                RecordRow(
+                    record.id,
+                    columns.map {
+                        ListCell(shownText(it.field, record), (record.values[it.field.id] as? LinkValue)?.thumbnail)
+                    }
+                ),
                 searchable.associate { it.id to shownText(it, record) }
             )
         }

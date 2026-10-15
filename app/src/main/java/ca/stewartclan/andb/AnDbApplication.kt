@@ -6,6 +6,7 @@ import ca.stewartclan.andb.data.FilterRepository
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.ViewRepository
 import ca.stewartclan.andb.ui.common.BrowseOrder
+import ca.stewartclan.andb.ui.common.PhotoAccess
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,8 @@ class AnDbApplication : Application() {
     val filters: FilterRepository by lazy { FilterRepository(repository) }
 
     val browseOrder = BrowseOrder()
+
+    val photos: PhotoAccess by lazy { PhotoAccess(contentResolver) }
 
     /** For saves that must finish after the screen that started them is gone. */
     val appScope = CoroutineScope(SupervisorJob())

@@ -103,9 +103,7 @@ fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(fact
             onDuplicate = { viewModel.duplicate() },
             onDelete = { confirmDelete = true }
         ),
-        editor = { state ->
-            EditorContext(state, readOnly = locked, onEdit = viewModel::edit, onToggleChoice = viewModel::toggleChoice)
-        }
+        editor = { viewModel.editorContext(it, locked) }
     )
 
     if (confirmDelete) DeleteRecordDialog(onConfirm = { viewModel.delete() }, onClose = { confirmDelete = false })

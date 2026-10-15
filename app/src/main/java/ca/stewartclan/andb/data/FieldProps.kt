@@ -16,18 +16,21 @@ sealed interface FieldProps {
         fun default(type: FieldType): FieldProps = when (type) {
             FieldType.ID -> IdProps()
             FieldType.LIST -> ListProps()
+            FieldType.LINK -> LinkProps()
             else -> NoProps
         }
 
         fun decode(type: FieldType, text: String): FieldProps = when (type) {
             FieldType.ID -> json.decodeFromString(IdProps.serializer(), text)
             FieldType.LIST -> json.decodeFromString(ListProps.serializer(), text)
+            FieldType.LINK -> json.decodeFromString(LinkProps.serializer(), text)
             else -> NoProps
         }
 
         fun encode(props: FieldProps): String = when (props) {
             is IdProps -> json.encodeToString(IdProps.serializer(), props)
             is ListProps -> json.encodeToString(ListProps.serializer(), props)
+            is LinkProps -> json.encodeToString(LinkProps.serializer(), props)
             NoProps -> "{}"
         }
     }
@@ -82,3 +85,13 @@ data class ListProps(val items: List<String> = emptyList(), val multiple: Boolea
 /** Choices taken from the current values of field [fieldId] in database [databaseId]. */
 @Serializable
 data class Lookup(val databaseId: String, val fieldId: Long)
+
+/** What a Link field points at. More sources (records, contacts, files) are planned. */
+@Serializable
+enum class LinkSource {
+    @SerialName("photo")
+    PHOTO
+}
+
+@Serializable
+data class LinkProps(val source: LinkSource = LinkSource.PHOTO) : FieldProps

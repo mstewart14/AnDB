@@ -50,6 +50,7 @@ import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdProps
+import ca.stewartclan.andb.data.LinkProps
 import ca.stewartclan.andb.data.ListProps
 import ca.stewartclan.andb.data.NoProps
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
@@ -257,6 +258,7 @@ private fun fieldSummary(field: FieldDef, databaseNames: Map<String, String>): S
                     ?: stringResource(R.string.list_summary_lookup_missing)
             }
         }
+        is LinkProps -> parts += stringResource(R.string.link_source_photo)
         NoProps -> Unit
     }
     if (field.required) parts += stringResource(R.string.design_summary_required)

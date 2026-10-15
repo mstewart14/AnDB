@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 /** Adds the record column for a new or newly stored [field]. */
 internal fun SQLiteDatabase.addColumn(field: FieldDef, idGenerator: IdGenerator) {
     if (field.isMultiList) createListTable(field.id)
+    if (field.type == FieldType.LINK) createLinkTable(field.id)
     val sqlType = field.storage.sqlType ?: return
     val column = DatabaseFile.columnName(field.id)
     execSQL("ALTER TABLE record ADD COLUMN $column $sqlType")
@@ -85,4 +86,35 @@ internal fun SQLiteDatabase.updateIds(old: FieldDef, new: FieldDef, idGenerator:
     }
     createUniqueIndex(column)
     backfillIds(new, idGenerator)
+}
+
+/**
+ * Starts or ends a field's life as a Link: a new Link starts empty with its snapshot table (other
+ * values aren't links); a former Link loses its snapshots.
+ */
+internal fun SQLiteDatabase.updateLink(old: FieldDef, new: FieldDef) {
+    if (new.type == FieldType.LINK && old.type != FieldType.LINK) {
+        execSQL("UPDATE record SET ${DatabaseFile.columnName(new.id)} = NULL")
+        createLinkTable(new.id)
+    } else if (old.type == FieldType.LINK && new.type != FieldType.LINK) {
+        execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkTable(old.id)}")
+    }
+}
+
+internal fun SQLiteDatabase.createListTable(fieldId: Long) {
+    execSQL(
+        "CREATE TABLE IF NOT EXISTS ${DatabaseFile.listTable(fieldId)} " +
+            "(record_id INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (record_id, value))"
+    )
+}
+
+internal fun SQLiteDatabase.createLinkTable(fieldId: Long) {
+    execSQL(
+        "CREATE TABLE IF NOT EXISTS ${DatabaseFile.linkTable(fieldId)} " +
+            "(record_id INTEGER PRIMARY KEY, name TEXT NOT NULL, thumbnail BLOB)"
+    )
+}
+
+internal fun SQLiteDatabase.createUniqueIndex(column: String) {
+    execSQL("CREATE UNIQUE INDEX IF NOT EXISTS u_$column ON record ($column)")
 }

@@ -13,8 +13,10 @@ import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
+import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
+import ca.stewartclan.andb.data.RequiredRule
 import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import java.time.Instant
@@ -40,6 +42,8 @@ data class RecordUiState(
     val drafts: Map<Long, String>,
     /** Choices of each multiple-choice List field, by field id. */
     val chosen: Map<Long, List<String>>,
+    /** Each Link field's link, or null for none, by field id. */
+    val links: Map<Long, LinkValue?>,
     /** What each List field offers, by field id. */
     val listChoices: Map<Long, List<String>>,
     val dirty: Boolean = false,
@@ -52,11 +56,14 @@ data class RecordUiState(
     /** Position in [recordIds]; a new record comes after the last. */
     val index: Int get() = if (isNew) recordIds.size else recordIds.indexOf(record.id)
 
+    /** The edited values as they would be stored. */
+    val values: Map<Long, Any?> get() = RequiredFields.values(fields, drafts) + links
+
     /** Required fields still empty. */
-    val missing: List<FieldDef> get() = RequiredFields.missing(fields, drafts, chosen)
+    val missing: List<FieldDef> get() = RequiredRule.missing(fields, values, chosen)
 
     /** Nothing entered at all, as in a record added by mistake. */
-    val isBlank: Boolean get() = RequiredFields.isBlank(fields, drafts, chosen)
+    val isBlank: Boolean get() = RequiredFields.isBlank(fields, drafts, chosen) && links.values.all { it == null }
 
     /** Edits not yet stored. A new record with nothing entered has none worth keeping. */
     val hasUnsavedInput: Boolean get() = dirty && !(isNew && isBlank)
@@ -108,6 +115,15 @@ class RecordViewModel(
         it?.copy(drafts = it.drafts + (field.id to text), dirty = true)
     }
 
+    /** What the field editors need to show [state] and report edits; [readOnly] in protected mode. */
+    fun editorContext(state: RecordUiState, readOnly: Boolean) =
+        EditorContext(state, readOnly, ::edit, ::toggleChoice, ::setLink)
+
+    /** Links [field] to [link], or unlinks it when null. */
+    fun setLink(field: FieldDef, link: LinkValue?) = _state.update {
+        it?.copy(links = it.links + (field.id to link), dirty = true)
+    }
+
     fun toggleChoice(field: FieldDef, choice: String) = _state.update {
         val current = it?.chosen?.get(field.id).orEmpty()
         val updated = if (choice in current) current - choice else current + choice
@@ -134,8 +150,9 @@ class RecordViewModel(
     /** Drops unsaved edits: back to the record as stored, or to a blank new record. */
     fun revert() = _state.update { state ->
         state?.copy(
-            drafts = state.record.values.mapValues { (_, v) -> FieldValues.toDraft(v) },
+            drafts = drafts(state.record),
             chosen = state.record.choices,
+            links = links(state.fields, state.record),
             dirty = false,
             showMissing = false
         )
@@ -192,7 +209,7 @@ class RecordViewModel(
     private suspend fun save(): Boolean = saveLock.withLock {
         val state = _state.value?.takeIf { it.hasUnsavedInput } ?: return true
         if (state.missing.isNotEmpty()) return false
-        val values = RequiredFields.values(state.fields, state.drafts)
+        val values = state.values
         val recordId = if (state.isNew) {
             records.insert(databaseId, values, state.chosen).also { savedState[KEY_RECORD] = it }
         } else {
@@ -205,7 +222,7 @@ class RecordViewModel(
                 record = stored,
                 recordIds = if (state.isNew) current.recordIds + recordId else current.recordIds,
                 // Edits made while saving are still unsaved.
-                dirty = current.drafts != state.drafts || current.chosen != state.chosen
+                dirty = current.drafts != state.drafts || current.chosen != state.chosen || current.links != state.links
             )
         }
         true
@@ -229,12 +246,20 @@ class RecordViewModel(
             fields = fields,
             recordIds = browseOrder.arrange(databaseId, records.recordIds(databaseId)),
             record = record,
-            drafts = record.values.mapValues { (_, v) -> FieldValues.toDraft(v) },
+            drafts = drafts(record),
             chosen = record.choices,
+            links = links(fields, record),
             listChoices = listChoices
         )
         savedState[KEY_RECORD] = recordId
     }
+
+    /** Editor text of [record]'s values; links are kept apart, as [links]. */
+    private fun drafts(record: Record): Map<Long, String> =
+        record.values.filterValues { it !is LinkValue }.mapValues { (_, v) -> FieldValues.toDraft(v) }
+
+    private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> =
+        fields.filter { it.type == FieldType.LINK }.associate { it.id to record.values[it.id] as? LinkValue }
 
     override fun onCleared() {
         saveInBackground()

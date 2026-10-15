@@ -141,6 +141,11 @@ private fun FieldSettings(draft: FieldDraft, lookup: LookupContext, editingField
     when (draft.type) {
         FieldType.ID -> IdPropsEditor(draft.idDraft, { draft.idDraft = it }, modifier)
         FieldType.LIST -> ListPropsEditor(draft.listDraft, { draft.listDraft = it }, lookup, editingFieldId, modifier)
+        FieldType.LINK -> Text(
+            stringResource(R.string.link_photo_explained),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = modifier
+        )
         else -> Unit
     }
     if (draft.type.canBeRequired) {

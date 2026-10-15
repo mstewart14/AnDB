@@ -219,4 +219,11 @@
     <string name="op_none_of">includes none of</string>
     <string name="op_no_choices">has no choices</string>
     <string name="op_has_choices">has choices</string>
+
+    <string name="link_source_photo">Photo</string>
+    <string name="link_photo_explained">Links each record to a photo from your gallery. The record keeps a reference to the photo, plus its name and a small thumbnail.</string>
+    <string name="photo_choose">Choose photo</string>
+    <string name="photo_change">Change</string>
+    <string name="photo_choose_again">Choose again</string>
+    <string name="photo_unavailable">Photo unavailable (deleted or access lost)</string>
 </resources>

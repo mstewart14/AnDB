@@ -183,4 +183,47 @@ class RecordRepositoryTest {
         assertTrue("expected refusal, got $error", error is RequiredFieldsMissingException)
         assertEquals(fields, (error as RequiredFieldsMissingException).fields)
     }
+
+    @Test
+    fun linksKeepTheirSnapshotThroughSaveDuplicateAndDelete() = runBlocking {
+        val id = repository.create("Books")
+        val cover = repository.addField(id, "Cover", FieldType.LINK)
+        val dune = LinkValue("content://photos/1", "dune.jpg", byteArrayOf(1, 2, 3))
+        val r = records.insert(id, mapOf(cover.id to dune), emptyMap())
+
+        assertEquals(dune, records.record(id, r)!!.values[cover.id])
+        val copy = records.duplicate(id, r)
+        assertEquals(dune, records.record(id, copy)!!.values[cover.id])
+
+        records.save(id, r, mapOf(cover.id to null), emptyMap())
+        assertNull(records.record(id, r)!!.values[cover.id])
+        records.delete(id, copy)
+        assertEquals(emptyList<String>(), repository.distinctValues(id, cover.id))
+    }
+
+    @Test
+    fun linksSortAndListByName() = runBlocking {
+        val id = repository.create("Books")
+        val cover = repository.addField(id, "Cover", FieldType.LINK)
+        val z = records.insert(id, mapOf(cover.id to LinkValue("content://p/1", "zebra.jpg", null)), emptyMap())
+        val a = records.insert(id, mapOf(cover.id to LinkValue("content://p/2", "Apple.jpg", null)), emptyMap())
+
+        assertEquals(listOf(a, z), records.records(id, listOf(SortKey(cover.id))).map { it.id })
+        assertEquals(listOf("Apple.jpg", "zebra.jpg"), repository.distinctValues(id, cover.id))
+    }
+
+    @Test
+    fun becomingALinkClearsValuesAndLeavingDropsSnapshots() = runBlocking {
+        val id = repository.create("Books")
+        val f = repository.addField(id, "Cover", FieldType.STRING)
+        val r = records.insert(id, mapOf(f.id to "not a link"), emptyMap())
+
+        repository.updateField(id, FieldDef(f.id, 0, "Cover", FieldType.LINK, LinkProps()))
+        assertNull(records.record(id, r)!!.values[f.id])
+        records.save(id, r, mapOf(f.id to LinkValue("content://p/1", "a.jpg", null)), emptyMap())
+
+        repository.updateField(id, FieldDef(f.id, 0, "Cover", FieldType.STRING, NoProps))
+        assertEquals("content://p/1", records.record(id, r)!!.values[f.id])
+        repository.deleteField(id, f.id)
+    }
 }

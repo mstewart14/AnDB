@@ -2,6 +2,7 @@ package ca.stewartclan.andb.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,5 +43,22 @@ class FieldDefTest {
         assertTrue(multi.keepsValuesAs(multi))
         assertFalse(multi.keepsValuesAs(single))
         assertFalse(multi.keepsValuesAs(field(FieldType.STRING)))
+    }
+
+    @Test
+    fun linksKeepValuesOnlyAsLinks() {
+        val link = field(FieldType.LINK)
+        assertFalse(field(FieldType.STRING).keepsValuesAs(link))
+        assertFalse(link.keepsValuesAs(field(FieldType.STRING)))
+        assertTrue(link.keepsValuesAs(link))
+        assertTrue(field(FieldType.SECTION).keepsValuesAs(link))
+    }
+
+    @Test
+    fun linkValuesCompareByContent() {
+        assertEquals(LinkValue("u", "a.jpg", byteArrayOf(1, 2)), LinkValue("u", "a.jpg", byteArrayOf(1, 2)))
+        assertNotEquals(LinkValue("u", "a.jpg", byteArrayOf(1, 2)), LinkValue("u", "a.jpg", byteArrayOf(1)))
+        assertTrue(RequiredRule.hasValue(field(FieldType.LINK), LinkValue("u", "a.jpg", null), emptyList()))
+        assertFalse(RequiredRule.hasValue(field(FieldType.LINK), null, emptyList()))
     }
 }

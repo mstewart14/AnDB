@@ -13,6 +13,8 @@ import java.io.File
  * - `record`: one row per record. Each field with storage gets a column named `f<field id>`, so
  *   renaming a field never touches the record table. ID columns have a unique index `u_f<field id>`.
  * - `list_f<field id>`: the choices of a multiple-choice List field, one row per record and choice.
+ * - `link_f<field id>`: the snapshot (name, thumbnail) of each record's link in a Link field; the
+ *   link's uri is in the record column.
  * - `andb_view`: named list views, with their columns and sort keys as JSON.
  * - `andb_filter`: saved filters, with their conditions as JSON.
  */
@@ -63,6 +65,8 @@ internal object DatabaseFile {
     fun columnName(fieldId: Long) = "f$fieldId"
 
     fun listTable(fieldId: Long) = "list_f$fieldId"
+
+    fun linkTable(fieldId: Long) = "link_f$fieldId"
 
     /** `andb_meta` key holding the next value of an increment ID field. */
     fun nextIdKey(fieldId: Long) = "next_id.$fieldId"
@@ -147,17 +151,6 @@ internal fun SQLiteDatabase.rebuildRecordTable(columns: List<RecordColumn>) {
     execSQL("DROP TABLE record")
     execSQL("ALTER TABLE record_new RENAME TO record")
     columns.filter { it.unique }.forEach { createUniqueIndex(it.name) }
-}
-
-internal fun SQLiteDatabase.createListTable(fieldId: Long) {
-    execSQL(
-        "CREATE TABLE IF NOT EXISTS ${DatabaseFile.listTable(fieldId)} " +
-            "(record_id INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (record_id, value))"
-    )
-}
-
-internal fun SQLiteDatabase.createUniqueIndex(column: String) {
-    execSQL("CREATE UNIQUE INDEX IF NOT EXISTS u_$column ON record ($column)")
 }
 
 internal fun SQLiteDatabase.deleteMeta(key: String) {

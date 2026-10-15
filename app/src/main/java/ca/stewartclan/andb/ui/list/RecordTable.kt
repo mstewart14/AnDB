@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.list
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -7,17 +8,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -26,6 +32,7 @@ import ca.stewartclan.andb.data.ColumnWidth
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.SortKey
 import ca.stewartclan.andb.data.canSort
+import ca.stewartclan.andb.ui.common.rememberThumbnail
 
 /**
  * Records as a table: a header row of field names (tap to sort) above the rows. Scrolls sideways
@@ -66,7 +73,7 @@ fun RecordTable(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { onOpen(row.id) }
                     ) {
-                        row.cells.forEachIndexed { i, text -> Cell(text, widths[i]) }
+                        row.cells.forEachIndexed { i, cell -> Cell(cell, widths[i]) }
                     }
                     HorizontalDivider()
                 }
@@ -98,16 +105,33 @@ private fun HeaderCell(field: FieldDef, sort: List<SortKey>, width: Dp, onSort: 
 }
 
 @Composable
-private fun Cell(text: String, width: Dp) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+private fun Cell(cell: ListCell, width: Dp) {
+    val thumbnail = rememberThumbnail(cell.thumbnail)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .width(width)
-            .padding(horizontal = CELL_PADDING, vertical = 14.dp)
-    )
+            .height(ROW_HEIGHT)
+            .padding(horizontal = CELL_PADDING)
+    ) {
+        if (thumbnail != null) {
+            Image(
+                thumbnail,
+                contentDescription = cell.text,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(THUMBNAIL_SIZE)
+                    .clip(RoundedCornerShape(4.dp))
+            )
+        }
+        Text(
+            cell.text,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = if (thumbnail != null) 8.dp else 0.dp)
+        )
+    }
 }
 
 val ColumnWidth.dp: Dp
@@ -118,6 +142,10 @@ val ColumnWidth.dp: Dp
     }
 
 private val CELL_PADDING = 12.dp
+
+/** Every row is this tall, with or without thumbnails, so rows line up. */
+private val ROW_HEIGHT = 52.dp
+private val THUMBNAIL_SIZE = 40.dp
 
 /** Room under the last row so the + button doesn't cover it. */
 private val FAB_CLEARANCE = 88.dp

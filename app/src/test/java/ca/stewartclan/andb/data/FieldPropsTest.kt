@@ -47,4 +47,10 @@ class FieldPropsTest {
         assertEquals(lookup, FieldProps.decode(FieldType.LIST, FieldProps.encode(lookup)))
         assertEquals(ListProps(), FieldProps.decode(FieldType.LIST, "{}"))
     }
+
+    @Test
+    fun linkPropsRoundTrip() {
+        assertEquals(LinkProps(), FieldProps.decode(FieldType.LINK, FieldProps.encode(LinkProps())))
+        assertEquals(LinkProps(LinkSource.PHOTO), FieldProps.decode(FieldType.LINK, """{"source":"photo"}"""))
+    }
 }

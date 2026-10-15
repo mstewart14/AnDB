@@ -29,6 +29,8 @@ data class FieldDef(
         isMultiList -> new.isMultiList
         !hasValues -> true
         new.type == FieldType.ID -> type == FieldType.ID
+        // Other values aren't links, and links (uris) mean nothing as other values.
+        new.type == FieldType.LINK || type == FieldType.LINK -> type == new.type
         new.isMultiList -> true
         else -> storage == new.storage
     }
