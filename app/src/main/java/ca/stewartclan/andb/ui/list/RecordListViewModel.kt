@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.list
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.json.Json
 
 /** A column of the list: [field] shown at [width]. */
 data class ListColumn(val field: FieldDef, val width: ColumnWidth)
@@ -39,8 +41,26 @@ data class ListUiState(
     val views: List<ListView>,
     val view: ListView,
     val columns: List<ListColumn>,
+    /** The rows shown: all records, or those matching [find]. */
     val rows: List<RecordRow>,
-    val hasFields: Boolean
+    val totalCount: Int,
+    val hasFields: Boolean,
+    /** Fields Find can search, for choosing one. */
+    val searchable: List<FieldDef>,
+    /** The search in progress, or null when not finding. */
+    val find: FindQuery?
+)
+
+/** Everything loaded for the current view, before Find narrows it. */
+private class Loaded(
+    val views: List<ListView>,
+    val view: ListView,
+    val columns: List<ListColumn>,
+    val rows: List<RecordRow>,
+    val fields: List<FieldDef>,
+    val searchable: List<FieldDef>,
+    /** Per record id, what each searchable field shows. */
+    val texts: Map<Long, Map<Long, String>>
 )
 
 class RecordListViewModel(
@@ -48,6 +68,7 @@ class RecordListViewModel(
     private val records: RecordRepository,
     private val viewStore: ViewRepository,
     private val browseOrder: BrowseOrder,
+    private val savedState: SavedStateHandle,
     /** Name of the view every database starts with. */
     private val defaultViewName: String,
     val databaseId: String
@@ -61,6 +82,8 @@ class RecordListViewModel(
 
     /** `null` while loading. */
     val state: StateFlow<ListUiState?> = _state.asStateFlow()
+
+    private var loaded: Loaded? = null
 
     /** Reloads everything; called whenever the list is shown, since records and design change elsewhere. */
     fun reload() = launchReporting { load(viewId = null) }
@@ -82,6 +105,15 @@ class RecordListViewModel(
         load(view.id)
     }
 
+    /** Starts finding, or changes what to find; null stops and shows all records again. */
+    fun setFind(query: FindQuery?) {
+        savedState[KEY_FIND] = query?.let { Json.encodeToString(FindQuery.serializer(), it) }
+        publish()
+    }
+
+    private val find: FindQuery?
+        get() = savedState.get<String>(KEY_FIND)?.let { Json.decodeFromString(FindQuery.serializer(), it) }
+
     /** Deletes the current view and shows the first remaining one. */
     fun deleteView() = launchReporting {
         val view = _state.value?.view ?: return@launchReporting
@@ -97,9 +129,37 @@ class RecordListViewModel(
         val wanted = viewId ?: viewStore.currentViewId(databaseId)
         val view = views.find { it.id == wanted } ?: views.first()
         val columns = columnsOf(view, fields)
-        val rows = records.records(databaseId, view.sort).map { record -> row(record, columns) }
+        val all = records.records(databaseId, view.sort)
+        val searchable = fields.filter { it.canBeColumn && it.type != FieldType.BOOLEAN }
+        loaded = Loaded(
+            views,
+            view,
+            columns,
+            all.map { record -> RecordRow(record.id, columns.map { shownText(it.field, record) }) },
+            fields,
+            searchable,
+            all.associate { record -> record.id to searchable.associate { it.id to shownText(it, record) } }
+        )
+        publish()
+    }
+
+    /** Shows the loaded records narrowed by Find; the record view then browses the same ones. */
+    private fun publish() {
+        val data = loaded ?: return
+        val query = find
+        val matches = query?.matcher()
+        val rows = if (matches == null) data.rows else data.rows.filter { matches(data.texts[it.id].orEmpty()) }
         browseOrder[databaseId] = rows.map { it.id }
-        _state.value = ListUiState(views, view, columns, rows, hasFields = fields.isNotEmpty())
+        _state.value = ListUiState(
+            views = data.views,
+            view = data.view,
+            columns = data.columns,
+            rows = rows,
+            totalCount = data.rows.size,
+            hasFields = data.fields.isNotEmpty(),
+            searchable = data.searchable,
+            find = query
+        )
     }
 
     private fun columnsOf(view: ListView, fields: List<FieldDef>): List<ListColumn> {
@@ -111,29 +171,29 @@ class RecordListViewModel(
         }
     }
 
-    private fun row(record: Record, columns: List<ListColumn>) = RecordRow(
-        record.id,
-        columns.map { (field, _) ->
-            when {
-                field.isMultiList -> record.choices[field.id].orEmpty().joinToString(", ")
-                field.type == FieldType.CREATED -> FieldValues.timestamp(record.created)
-                field.type == FieldType.MODIFIED -> FieldValues.timestamp(record.modified)
-                else -> FieldValues.display(field, record.values[field.id])
-            }
-        }
-    )
+    /** What [field] of [record] shows in the list. */
+    private fun shownText(field: FieldDef, record: Record): String = when {
+        field.isMultiList -> record.choices[field.id].orEmpty().joinToString(", ")
+        field.type == FieldType.CREATED -> FieldValues.timestamp(record.created)
+        field.type == FieldType.MODIFIED -> FieldValues.timestamp(record.modified)
+        else -> FieldValues.display(field, record.values[field.id])
+    }
 
     companion object {
+        private const val KEY_FIND = "find"
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as AnDbApplication
+                val savedState = createSavedStateHandle()
                 RecordListViewModel(
                     app.repository,
                     app.records,
                     app.views,
                     app.browseOrder,
+                    savedState,
                     app.getString(R.string.view_default_name),
-                    createSavedStateHandle().toRoute<RecordListRoute>().databaseId
+                    savedState.toRoute<RecordListRoute>().databaseId
                 )
             }
         }

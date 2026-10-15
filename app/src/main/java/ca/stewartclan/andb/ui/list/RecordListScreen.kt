@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.list
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,6 +65,8 @@ class ListActions(
     val onNew: () -> Unit,
     val onEditDesign: () -> Unit,
     val onSort: (FieldDef) -> Unit,
+    /** Starts or changes a search; null ends it. */
+    val onFind: (FindQuery?) -> Unit,
     val views: ViewActions
 )
 
@@ -92,6 +97,8 @@ fun RecordListScreen(
         onPauseOrDispose {}
     }
     val db = viewModel.databaseId
+    // While finding, Back ends the search rather than leaving the list.
+    BackHandler(enabled = state?.find != null) { viewModel.setFind(null) }
 
     RecordListContent(
         title = database?.name.orEmpty(),
@@ -103,6 +110,7 @@ fun RecordListScreen(
             onNew = { onOpenRecord(db, NEW_RECORD_ID) },
             onEditDesign = { onEditDesign(db) },
             onSort = viewModel::sortBy,
+            onFind = viewModel::setFind,
             views = ViewActions(
                 onSelect = viewModel::selectView,
                 onNew = { onEditView(db, NEW_VIEW_ID) },
@@ -139,7 +147,14 @@ fun RecordListContent(
 ) {
     Scaffold(
         modifier = modifier,
-        topBar = { ListTopBar(title, state, actions) },
+        topBar = {
+            Column {
+                ListTopBar(title, state, actions)
+                state?.find?.let {
+                    FindOptions(it, state.searchable, state.rows.size, state.totalCount, actions.onFind)
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = actions.onNew) {
@@ -149,6 +164,11 @@ fun RecordListContent(
     ) { innerPadding ->
         when {
             state == null -> Unit
+            state.rows.isEmpty() && state.find != null && state.totalCount > 0 -> Text(
+                stringResource(R.string.find_no_match),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(innerPadding).padding(24.dp)
+            )
             state.rows.isEmpty() -> EmptyList(state.hasFields, Modifier.padding(innerPadding))
             else -> RecordTable(
                 columns = state.columns,
@@ -165,19 +185,37 @@ fun RecordListContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ListTopBar(title: String, state: ListUiState?, actions: ListActions) {
+    val find = state?.find
     TopAppBar(
         title = {
-            Column {
-                Text(title)
-                if (state != null) ViewPicker(state, actions)
+            if (find != null) {
+                FindField(find, actions.onFind)
+            } else {
+                Column {
+                    Text(title)
+                    if (state != null) ViewPicker(state, actions)
+                }
             }
         },
         navigationIcon = {
-            IconButton(onClick = actions.onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+            if (find != null) {
+                IconButton(onClick = { actions.onFind(null) }) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.find_close))
+                }
+            } else {
+                IconButton(onClick = actions.onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                }
             }
         },
-        actions = { ListMenu(canDeleteView = (state?.views?.size ?: 0) > 1, actions) }
+        actions = {
+            if (find == null && state != null && state.totalCount > 0) {
+                IconButton(onClick = { actions.onFind(FindQuery()) }) {
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.find_open))
+                }
+            }
+            ListMenu(canDeleteView = (state?.views?.size ?: 0) > 1, actions)
+        }
     )
 }
 

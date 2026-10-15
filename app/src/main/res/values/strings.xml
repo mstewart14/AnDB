@@ -169,4 +169,12 @@
     <string name="view_sort_ascending">Ascending</string>
     <string name="view_sort_descending">Descending</string>
     <string name="view_sort_case_sensitive">Case-sensitive</string>
+
+    <string name="find_open">Find</string>
+    <string name="find_close">Stop finding</string>
+    <string name="find_placeholder">Find…</string>
+    <string name="find_all_fields">All fields</string>
+    <string name="find_whole_word">Whole word</string>
+    <string name="find_count">%1$d of %2$d</string>
+    <string name="find_no_match">No records match.</string>
 </resources>
