@@ -32,6 +32,13 @@
     <string name="chooser_duplicate_with_records">Design and records</string>
     <string name="chooser_duplicate_with_records_explained">A full copy, records included</string>
     <string name="action_duplicate_confirm">Duplicate</string>
+    <string name="chooser_export">Export\u2026</string>
+    <string name="action_export">Export</string>
+    <string name="chooser_export_title">Export \u201c%1$s\u201d</string>
+    <string name="chooser_export_explained">Saves an .andb file to keep, share, or import on another device.</string>
+    <string name="chooser_exported">Exported \u201c%1$s\u201d</string>
+    <string name="chooser_import">Import database\u2026</string>
+    <string name="chooser_imported">Imported \u201c%1$s\u201d</string>
     <string name="chooser_name_duplicate">A database with this name already exists</string>
     <string name="chooser_delete_title">Delete “%1$s”?</string>
     <plurals name="chooser_delete_body">

@@ -35,3 +35,11 @@ internal fun SQLiteDatabase.clearRecords() {
     val hasSequence = longQuery("SELECT COUNT(*) FROM sqlite_master WHERE name = 'sqlite_sequence'") > 0
     if (hasSequence) execSQL("DELETE FROM sqlite_sequence WHERE name = 'record'")
 }
+
+/** Has this database's Link fields to database [id], about to be deleted, remember its [name]. */
+internal fun SQLiteDatabase.nameDeletedDatabase(id: String, name: String) {
+    readFields().filter { it.recordLink?.databaseId == id }.forEach { field ->
+        val props = (field.props as LinkProps).copy(missingName = name)
+        execSQL("UPDATE andb_field SET props = ? WHERE id = ?", arrayOf(FieldProps.encode(props), field.id))
+    }
+}

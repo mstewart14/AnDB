@@ -91,7 +91,7 @@ private fun DuplicateDialog(
 }
 
 @Composable
-private fun CopyChoice(label: String, explanation: String, selected: Boolean, onSelect: () -> Unit) {
+fun CopyChoice(label: String, explanation: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

@@ -77,7 +77,8 @@ fun ChooserScreen(
         onNewDatabase = { newOpen = true },
         onRename = { renameId = it.id },
         onDuplicate = { duplicateId = it.id },
-        onDelete = { deleteId = it.id }
+        onDelete = { deleteId = it.id },
+        transfer = rememberTransferActions(viewModel, snackbarHostState)
     )
 
     if (newOpen) {
@@ -129,11 +130,14 @@ fun ChooserContent(
     onRename: (DatabaseSummary) -> Unit,
     onDuplicate: (DatabaseSummary) -> Unit,
     onDelete: (DatabaseSummary) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    transfer: TransferActions = TransferActions(onExport = {}, onImport = {})
 ) {
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
+        topBar = {
+            TopAppBar(title = { Text(stringResource(R.string.app_name)) }, actions = { ChooserMenu(transfer.onImport) })
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = onNewDatabase) {
@@ -151,6 +155,7 @@ fun ChooserContent(
                         onOpen = { onOpen(db) },
                         onRename = { onRename(db) },
                         onDuplicate = { onDuplicate(db) },
+                        onExport = { transfer.onExport(db) },
                         onDelete = { onDelete(db) }
                     )
                     HorizontalDivider()
@@ -184,6 +189,7 @@ private fun DatabaseRow(
     onOpen: () -> Unit,
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
+    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -222,6 +228,13 @@ private fun DatabaseRow(
                         onClick = {
                             menuOpen = false
                             onDuplicate()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.chooser_export)) },
+                        onClick = {
+                            menuOpen = false
+                            onExport()
                         }
                     )
                     DropdownMenuItem(
@@ -312,5 +325,25 @@ private fun ChooserContentPreview() {
 private fun ChooserContentEmptyPreview() {
     AnDbTheme(dynamicColor = false) {
         ChooserContent(emptyList(), remember { SnackbarHostState() }, {}, {}, {}, {}, {})
+    }
+}
+
+/** The chooser's own menu: importing a database from a file. */
+@Composable
+private fun ChooserMenu(onImport: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.chooser_import)) },
+                onClick = {
+                    open = false
+                    onImport()
+                }
+            )
+        }
     }
 }

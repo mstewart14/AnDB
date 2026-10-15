@@ -25,7 +25,7 @@ data class DatabaseSummary(val id: String, val name: String, val recordCount: Lo
  * directory, so there is no separate catalog to fall out of step with them.
  */
 class DatabaseRepository(
-    private val dir: File,
+    internal val dir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     internal val clock: () -> Instant = Instant::now,
     internal val idGenerator: IdGenerator = IdGenerator()
@@ -37,8 +37,7 @@ class DatabaseRepository(
     val databases: StateFlow<List<DatabaseSummary>?> = _databases.asStateFlow()
 
     suspend fun refresh() = withContext(ioDispatcher) {
-        val files = dir.listFiles { f -> f.isFile && f.extension == DatabaseFile.EXTENSION }.orEmpty()
-        _databases.value = files.mapNotNull(::readSummary).sortedWith(
+        _databases.value = readSummaries().sortedWith(
             compareBy(String.CASE_INSENSITIVE_ORDER, DatabaseSummary::name).thenBy(DatabaseSummary::id)
         )
     }
@@ -87,30 +86,19 @@ class DatabaseRepository(
      */
     suspend fun delete(id: String) = mutate {
         val name = withDatabase(id) { getMeta(DatabaseFile.META_NAME) }
-        if (name != null) rememberDeletedName(id, name)
-        check(SQLiteDatabase.deleteDatabase(fileFor(id))) { "No database $id" }
-    }
-
-    private fun rememberDeletedName(id: String, name: String) {
-        val files = dir.listFiles { f -> f.isFile && f.extension == DatabaseFile.EXTENSION }.orEmpty()
-        files.mapNotNull(::readSummary).filter { it.id != id }.forEach { other ->
-            try {
-                withDatabase(other.id) {
-                    readFields().filter { it.recordLink?.databaseId == id }.forEach { field ->
-                        val props = (field.props as LinkProps).copy(missingName = name)
-                        execSQL(
-                            "UPDATE andb_field SET props = ? WHERE id = ?",
-                            arrayOf(FieldProps.encode(props), field.id)
-                        )
-                    }
+        if (name != null) {
+            readSummaries().filter { it.id != id }.forEach { other ->
+                try {
+                    withDatabase(other.id) { nameDeletedDatabase(id, name) }
+                } catch (e: SQLiteException) {
+                    // One unwritable database mustn't stop the delete; its links just won't know the name.
+                    Log.w(TAG, "Couldn't note deleted database in ${other.id}", e)
+                } catch (e: IllegalArgumentException) {
+                    Log.w(TAG, "Skipping ${other.id}: ${e.message}")
                 }
-            } catch (e: SQLiteException) {
-                // One unwritable database mustn't stop the delete; its links just won't know the name.
-                Log.w(TAG, "Couldn't note deleted database in ${other.id}", e)
-            } catch (e: IllegalArgumentException) {
-                Log.w(TAG, "Skipping ${other.id}: ${e.message}")
             }
         }
+        check(SQLiteDatabase.deleteDatabase(fileFor(id))) { "No database $id" }
     }
 
     suspend fun fields(id: String): List<FieldDef> = withContext(ioDispatcher) {
@@ -259,7 +247,7 @@ class DatabaseRepository(
         withDatabase(id) { transaction { block() } }
     }
 
-    private fun fileFor(id: String): File {
+    internal fun fileFor(id: String): File {
         require(UUID.fromString(id).toString() == id) { "Bad database id: $id" }
         return File(dir, "$id.${DatabaseFile.EXTENSION}")
     }
@@ -268,9 +256,13 @@ class DatabaseRepository(
         DatabaseFile.open(fileFor(id)).use(block)
 
     /** Runs a change off the main thread, one at a time, then refreshes [databases]. */
-    private suspend fun <T> mutate(block: () -> T): T = writeLock.withLock {
+    internal suspend fun <T> mutate(block: () -> T): T = writeLock.withLock {
         withContext(ioDispatcher) { block() }.also { refresh() }
     }
+
+    /** Every database file's summary, read from disk; unreadable files are left out. */
+    internal fun readSummaries(): List<DatabaseSummary> =
+        dir.listFiles { f -> f.isFile && f.extension == DatabaseFile.EXTENSION }.orEmpty().mapNotNull(::readSummary)
 
     private fun readSummary(file: File): DatabaseSummary? = try {
         DatabaseFile.open(file).use { db ->

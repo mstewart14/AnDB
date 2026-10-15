@@ -10,8 +10,8 @@ format and no code is derived from it.
 
 | Screen | Behaviour | Status |
 |---|---|---|
-| Chooser | List of databases, alphabetical. New (opens its design), Rename, Duplicate (design only, or with records; links and lookups to itself point into the copy; a design-only copy restarts IDs), Delete. | Done |
-| Chooser, more | Categories, manual order, create from template / "Create using…" (copy a design), Share. | Planned |
+| Chooser | List of databases, alphabetical. New (opens its design), Rename, Duplicate (design only, or with records; links and lookups to itself point into the copy; a design-only copy restarts IDs), Delete. Export a database as an `.andb` file (its SQLite file; design only, or with records) through the system save dialog; Import database… adds one from such a file under its own name (numbered if taken), its links to itself pointing at it. Links to other databases carry those databases' names, so on another device a database of the same name takes their place (see Links). | Done |
+| Chooser, more | Categories, manual order, create from template / "Create using…" (copy a design), share straight to another app. | Planned |
 | List view | Records as a table with a header row; tap a header to sort (again to reverse). Named list views: columns (show all fields, or chosen ones in order, narrow/medium/wide) and sort levels (field, ascending/descending, case-sensitive). Find: case-sensitive, whole word, one field or all, on the text as shown. Saved named filters. Previous/next in the record view follows the list's order, filter and find. | Done |
 | Record view | One record, all fields, an input per type. Previous/next (buttons or swipe), protected mode (lock), + for a new record, duplicate, delete. Edits save on leaving the record. | Done |
 | Design view | One row per field: name, type, settings. Add, edit, delete; reorder by drag and drop or menu. Warns before changes that lose or convert values. | Done |

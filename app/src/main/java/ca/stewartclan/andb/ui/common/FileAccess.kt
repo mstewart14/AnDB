@@ -8,14 +8,18 @@ import kotlinx.coroutines.withContext
 
 /** Reading and writing files the user picked with the system file dialogs, which need no permission. */
 class FileAccess(private val resolver: ContentResolver) {
-    suspend fun writeText(uri: Uri, text: String) = withContext(Dispatchers.IO) {
+    suspend fun writeText(uri: Uri, text: String) = writeBytes(uri, text.toByteArray(Charsets.UTF_8))
+
+    suspend fun readText(uri: Uri): String = readBytes(uri).toString(Charsets.UTF_8)
+
+    suspend fun writeBytes(uri: Uri, bytes: ByteArray) = withContext(Dispatchers.IO) {
         // "wt": replace the file's contents rather than writing over the start of them.
         val stream = resolver.openOutputStream(uri, "wt") ?: throw IOException("Can't write $uri")
-        stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+        stream.use { it.write(bytes) }
     }
 
-    suspend fun readText(uri: Uri): String = withContext(Dispatchers.IO) {
+    suspend fun readBytes(uri: Uri): ByteArray = withContext(Dispatchers.IO) {
         val stream = resolver.openInputStream(uri) ?: throw IOException("Can't read $uri")
-        stream.use { it.readBytes().toString(Charsets.UTF_8) }
+        stream.use { it.readBytes() }
     }
 }
