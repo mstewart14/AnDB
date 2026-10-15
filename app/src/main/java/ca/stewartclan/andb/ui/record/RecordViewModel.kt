@@ -15,9 +15,11 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.Record
+import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.RequiredRule
 import ca.stewartclan.andb.ui.common.BrowseOrder
+import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +48,8 @@ data class RecordUiState(
     val links: Map<Long, LinkValue?>,
     /** What each List field offers, by field id. */
     val listChoices: Map<Long, List<String>>,
+    /** For each Link field to records: the titles of the records it can link to, by record id. */
+    val recordTitles: Map<Long, Map<Long, String>> = emptyMap(),
     val dirty: Boolean = false,
     /** Whether to point out empty required fields, after an attempt to move on without them. */
     val showMissing: Boolean = false
@@ -72,9 +76,11 @@ data class RecordUiState(
     val wouldLoseEdits: Boolean get() = hasUnsavedInput && missing.isNotEmpty()
 }
 
+/** Where the record view's data comes from. */
+class RecordStores(val repository: DatabaseRepository, val records: RecordRepository, val titles: RecordTitles)
+
 class RecordViewModel(
-    private val repository: DatabaseRepository,
-    private val records: RecordRepository,
+    private val stores: RecordStores,
     /** Saves started when leaving the screen run here, so they finish after the ViewModel is gone. */
     private val appScope: CoroutineScope,
     private val savedState: SavedStateHandle,
@@ -82,6 +88,9 @@ class RecordViewModel(
     private val databaseId: String,
     startRecordId: Long
 ) : ReportingViewModel() {
+
+    private val repository = stores.repository
+    private val records = stores.records
 
     val database: StateFlow<DatabaseSummary?> = repository.databases
         .map { dbs -> dbs?.find { it.id == databaseId } }
@@ -116,8 +125,8 @@ class RecordViewModel(
     }
 
     /** What the field editors need to show [state] and report edits; [readOnly] in protected mode. */
-    fun editorContext(state: RecordUiState, readOnly: Boolean) =
-        EditorContext(state, readOnly, ::edit, ::toggleChoice, ::setLink)
+    fun editorContext(state: RecordUiState, readOnly: Boolean, onOpenRecord: (RecordRef) -> Unit) =
+        EditorContext(state, readOnly, ::edit, ::toggleChoice, ::setLink, onOpenRecord)
 
     /** Links [field] to [link], or unlinks it when null. */
     fun setLink(field: FieldDef, link: LinkValue?) = _state.update {
@@ -242,6 +251,7 @@ class RecordViewModel(
         }
         val listChoices = _state.value?.listChoices ?: fields.filter { it.type == FieldType.LIST }
             .associate { it.id to records.choicesFor(it) }
+        val recordTitles = _state.value?.recordTitles ?: loadTitles(fields)
         _state.value = RecordUiState(
             fields = fields,
             recordIds = browseOrder.arrange(databaseId, records.recordIds(databaseId)),
@@ -249,10 +259,21 @@ class RecordViewModel(
             drafts = drafts(record),
             chosen = record.choices,
             links = links(fields, record),
-            listChoices = listChoices
+            listChoices = listChoices,
+            recordTitles = recordTitles
         )
         savedState[KEY_RECORD] = recordId
     }
+
+    /** Reloads linked records' titles, which may have changed elsewhere; when the screen is shown again. */
+    fun refreshLinks() = launchReporting {
+        val state = _state.value ?: return@launchReporting
+        val titles = loadTitles(state.fields)
+        _state.update { it?.copy(recordTitles = titles) }
+    }
+
+    private suspend fun loadTitles(fields: List<FieldDef>): Map<Long, Map<Long, String>> =
+        fields.mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
 
     /** Editor text of [record]'s values; links are kept apart, as [links]. */
     private fun drafts(record: Record): Map<Long, String> =
@@ -276,8 +297,7 @@ class RecordViewModel(
                 val savedState = createSavedStateHandle()
                 val route = savedState.toRoute<RecordRoute>()
                 RecordViewModel(
-                    app.repository,
-                    app.records,
+                    RecordStores(app.repository, app.records, app.recordTitles),
                     app.appScope,
                     savedState,
                     app.browseOrder,

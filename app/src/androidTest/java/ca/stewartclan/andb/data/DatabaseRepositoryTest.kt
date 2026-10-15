@@ -360,9 +360,12 @@ class DatabaseRepositoryTest {
                 "CREATE TABLE andb_field (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
                     "type TEXT NOT NULL, props TEXT NOT NULL DEFAULT '{}')"
             )
-            db.execSQL("CREATE TABLE record (${DatabaseFile.SYSTEM_COLUMNS_DDL})")
+            db.execSQL(
+                "CREATE TABLE record (_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL, f1 TEXT)"
+            )
             db.execSQL("INSERT INTO andb_meta VALUES ('name', 'Old')")
             db.execSQL("INSERT INTO andb_field (position, name, type) VALUES (0, 'Title', 'string')")
+            db.execSQL("INSERT INTO record (_created, _modified, f1) VALUES ('t', 't', 'Dune')")
             db.version = 1
         }
 
@@ -371,6 +374,8 @@ class DatabaseRepositoryTest {
         assertEquals(listOf("Old"), repository.databases.value!!.map { it.name })
         assertEquals(listOf(FieldDef(1, 0, "Title", FieldType.STRING)), repository.fields(id))
         assertEquals(DatabaseFile.SCHEMA_VERSION, openRaw(id).use { it.version })
+        // The record table was rebuilt (v5) with its data.
+        assertEquals("Dune", records.record(id, 1)!!.values[1L])
     }
 
     @Test

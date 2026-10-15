@@ -20,6 +20,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +37,8 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.SortKey
 import ca.stewartclan.andb.data.canSort
 import ca.stewartclan.andb.ui.common.rememberThumbnail
+import ca.stewartclan.andb.ui.record.PhotoViewer
+import ca.stewartclan.andb.ui.record.rememberPhotoAccess
 
 /**
  * Records as a table: a header row of field names (tap to sort) above the rows. Scrolls sideways
@@ -106,7 +112,8 @@ private fun HeaderCell(field: FieldDef, sort: List<SortKey>, width: Dp, onSort: 
 
 @Composable
 private fun Cell(cell: ListCell, width: Dp) {
-    val thumbnail = rememberThumbnail(cell.thumbnail)
+    val thumbnail = rememberThumbnail(cell.photo?.thumbnail)
+    var viewing by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -123,11 +130,15 @@ private fun Cell(cell: ListCell, width: Dp) {
                 modifier = Modifier
                     .size(THUMBNAIL_SIZE)
                     .clip(RoundedCornerShape(4.dp))
+                    // Tapping the thumbnail shows the photo (tap again to close) rather than opening the record.
+                    .clickable { viewing = true }
             )
         } else {
             Text(cell.text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+    val photo = cell.photo
+    if (viewing && photo != null) PhotoViewer(photo, rememberPhotoAccess(), onClose = { viewing = false })
 }
 
 val ColumnWidth.dp: Dp

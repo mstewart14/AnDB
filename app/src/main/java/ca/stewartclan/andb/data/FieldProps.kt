@@ -86,12 +86,39 @@ data class ListProps(val items: List<String> = emptyList(), val multiple: Boolea
 @Serializable
 data class Lookup(val databaseId: String, val fieldId: Long)
 
-/** What a Link field points at. More sources (records, contacts, files) are planned. */
+/** What a Link field points at. More sources (contacts, files) are planned. */
 @Serializable
 enum class LinkSource {
     @SerialName("photo")
-    PHOTO
+    PHOTO,
+
+    @SerialName("record")
+    RECORD
 }
 
+/**
+ * Settings of a Link field. For [LinkSource.RECORD]: records of database [databaseId], shown by
+ * their [displayFieldId] (the first field that can show, when null).
+ */
 @Serializable
-data class LinkProps(val source: LinkSource = LinkSource.PHOTO) : FieldProps
+data class LinkProps(
+    val source: LinkSource = LinkSource.PHOTO,
+    val databaseId: String? = null,
+    val displayFieldId: Long? = null
+) : FieldProps
+
+/** A link to record [recordId] of database [databaseId], stored as `andb://<database>/<record>`. */
+data class RecordRef(val databaseId: String, val recordId: Long) {
+    val uri: String get() = "$SCHEME$databaseId/$recordId"
+
+    companion object {
+        private const val SCHEME = "andb://"
+
+        fun parse(uri: String): RecordRef? {
+            if (!uri.startsWith(SCHEME)) return null
+            val parts = uri.removePrefix(SCHEME).split('/')
+            val recordId = parts.getOrNull(1)?.toLongOrNull()
+            return if (parts.size == 2 && recordId != null) RecordRef(parts[0], recordId) else null
+        }
+    }
+}

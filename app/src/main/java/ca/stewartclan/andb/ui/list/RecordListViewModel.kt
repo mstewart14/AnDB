@@ -18,11 +18,13 @@ import ca.stewartclan.andb.data.FilterRepository
 import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.ListView
 import ca.stewartclan.andb.data.Record
+import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.SortKey
 import ca.stewartclan.andb.data.ViewRepository
 import ca.stewartclan.andb.data.canBeColumn
 import ca.stewartclan.andb.ui.common.BrowseOrder
+import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
 import ca.stewartclan.andb.ui.record.FieldValues
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,8 +38,8 @@ import kotlinx.serialization.json.Json
 /** A column of the list: [field] shown at [width]. */
 data class ListColumn(val field: FieldDef, val width: ColumnWidth)
 
-/** What a list cell shows: text, and a thumbnail for photo links. */
-data class ListCell(val text: String, val thumbnail: ByteArray? = null)
+/** What a list cell shows: text, or for a photo link its thumbnail, with the link to open the photo. */
+data class ListCell(val text: String, val photo: LinkValue? = null)
 
 /** A record as a list row: one cell per column. */
 data class RecordRow(val id: Long, val cells: List<ListCell>)
@@ -77,15 +79,26 @@ private class Entry(val record: Record, val row: RecordRow, val texts: Map<Long,
 
 private val FieldDef.isSearchable: Boolean get() = canBeColumn && type != FieldType.BOOLEAN
 
+/** Where the list view's data comes from. */
+class ListStores(
+    val repository: DatabaseRepository,
+    val records: RecordRepository,
+    val views: ViewRepository,
+    val filters: FilterRepository,
+    val titles: RecordTitles
+)
+
 class RecordListViewModel(
-    private val repository: DatabaseRepository,
-    private val records: RecordRepository,
-    private val viewStore: ViewRepository,
-    private val filterStore: FilterRepository,
+    private val stores: ListStores,
     private val browseOrder: BrowseOrder,
     private val savedState: SavedStateHandle,
     val databaseId: String
 ) : ReportingViewModel() {
+
+    private val repository = stores.repository
+    private val records = stores.records
+    private val viewStore = stores.views
+    private val filterStore = stores.filters
 
     val database: StateFlow<DatabaseSummary?> = repository.databases
         .map { dbs -> dbs?.find { it.id == databaseId } }
@@ -151,13 +164,20 @@ class RecordListViewModel(
         val filters = filterStore.filters(databaseId)
         val filterId = filterStore.currentFilterId(databaseId)
         val searchable = fields.filter { it.isSearchable }
+        // Linked records show live, by their display field.
+        val titles = (columns.map { it.field } + searchable).distinct()
+            .mapNotNull { field -> field.recordLink?.let { field.id to stores.titles.titles(it) } }.toMap()
+        val shownText = { field: FieldDef, record: Record -> shown(field, record, titles) }
         val entries = records.records(databaseId, view.sort).map { record ->
             Entry(
                 record,
                 RecordRow(
                     record.id,
                     columns.map {
-                        ListCell(shownText(it.field, record), (record.values[it.field.id] as? LinkValue)?.thumbnail)
+                        ListCell(
+                            shownText(it.field, record),
+                            (record.values[it.field.id] as? LinkValue)?.takeIf { _ -> it.field.recordLink == null }
+                        )
                     }
                 ),
                 searchable.associate { it.id to shownText(it, record) }
@@ -201,11 +221,11 @@ class RecordListViewModel(
     }
 
     /** What [field] of [record] shows in the list. */
-    private fun shownText(field: FieldDef, record: Record): String = when {
-        field.isMultiList -> record.choices[field.id].orEmpty().joinToString(", ")
-        field.type == FieldType.CREATED -> FieldValues.timestamp(record.created)
-        field.type == FieldType.MODIFIED -> FieldValues.timestamp(record.modified)
-        else -> FieldValues.display(field, record.values[field.id])
+    /** What [field] of [record] shows; a record link shows its record's title from [titles] if it still exists. */
+    private fun shown(field: FieldDef, record: Record, titles: Map<Long, Map<Long, String>>): String {
+        val link = record.values[field.id] as? LinkValue
+        val ref = link?.let { RecordRef.parse(it.uri) }
+        return if (ref != null) titles[field.id]?.get(ref.recordId) ?: link.name else FieldValues.shown(field, record)
     }
 
     companion object {
@@ -216,10 +236,7 @@ class RecordListViewModel(
                 val app = this[APPLICATION_KEY] as AnDbApplication
                 val savedState = createSavedStateHandle()
                 RecordListViewModel(
-                    app.repository,
-                    app.records,
-                    app.views,
-                    app.filters,
+                    ListStores(app.repository, app.records, app.views, app.filters, app.recordTitles),
                     app.browseOrder,
                     savedState,
                     savedState.toRoute<RecordListRoute>().databaseId

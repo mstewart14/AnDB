@@ -3,6 +3,7 @@ package ca.stewartclan.andb.ui.record
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdProps
+import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.Storage
 import java.time.Instant
 import java.time.LocalDate
@@ -67,6 +68,14 @@ object FieldValues {
         field.type == FieldType.RATING -> (value as? Long)?.let { stars(it.toInt()) } ?: value.toString()
         field.type == FieldType.ID && value is Long -> (field.props as? IdProps)?.format(value) ?: value.toString()
         else -> toDraft(value)
+    }
+
+    /** What [field] of [record] shows as one line of text, e.g. in a list cell. */
+    fun shown(field: FieldDef, record: Record): String = when {
+        field.isMultiList -> record.choices[field.id].orEmpty().joinToString(", ")
+        field.type == FieldType.CREATED -> timestamp(record.created)
+        field.type == FieldType.MODIFIED -> timestamp(record.modified)
+        else -> display(field, record.values[field.id])
     }
 
     fun stars(rating: Int): String = "★".repeat(rating.coerceIn(0, MAX_RATING)) +

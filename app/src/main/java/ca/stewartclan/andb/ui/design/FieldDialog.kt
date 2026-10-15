@@ -36,6 +36,7 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldProps
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdProps
+import ca.stewartclan.andb.data.LinkProps
 import ca.stewartclan.andb.data.ListProps
 import ca.stewartclan.andb.ui.common.NameField
 import ca.stewartclan.andb.ui.common.NameProblem
@@ -102,12 +103,14 @@ class FieldDraft(
     type: MutableState<FieldType>,
     idDraft: MutableState<IdDraft>,
     listDraft: MutableState<ListDraft>,
+    linkDraft: MutableState<LinkDraft>,
     required: MutableState<Boolean>
 ) {
     var name by name
     var type by type
     var idDraft by idDraft
     var listDraft by listDraft
+    var linkDraft by linkDraft
     var required by required
 
     /** The field as entered (id and position unset), or null while a setting is invalid. */
@@ -115,6 +118,7 @@ class FieldDraft(
         val props = when (type) {
             FieldType.ID -> idDraft.toProps()
             FieldType.LIST -> listDraft.toProps()
+            FieldType.LINK -> linkDraft.toProps()
             else -> FieldProps.default(type)
         }
         return props?.let { FieldDef(0, 0, name.text, type, it, required && type.canBeRequired) }
@@ -131,8 +135,11 @@ private fun rememberFieldDraft(field: FieldDef?): FieldDraft {
     val listDraft = rememberSaveable(stateSaver = ListDraft.Saver) {
         mutableStateOf((field?.props as? ListProps)?.let(ListDraft::of) ?: ListDraft())
     }
+    val linkDraft = rememberSaveable(stateSaver = LinkDraft.Saver) {
+        mutableStateOf((field?.props as? LinkProps)?.let(LinkDraft::of) ?: LinkDraft())
+    }
     val required = rememberSaveable { mutableStateOf(field?.required ?: false) }
-    return remember { FieldDraft(name, type, idDraft, listDraft, required) }
+    return remember { FieldDraft(name, type, idDraft, listDraft, linkDraft, required) }
 }
 
 /** The settings of the draft's type, and the Required switch where it applies. */
@@ -141,11 +148,7 @@ private fun FieldSettings(draft: FieldDraft, lookup: LookupContext, editingField
     when (draft.type) {
         FieldType.ID -> IdPropsEditor(draft.idDraft, { draft.idDraft = it }, modifier)
         FieldType.LIST -> ListPropsEditor(draft.listDraft, { draft.listDraft = it }, lookup, editingFieldId, modifier)
-        FieldType.LINK -> Text(
-            stringResource(R.string.link_photo_explained),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = modifier
-        )
+        FieldType.LINK -> LinkPropsEditor(draft.linkDraft, { draft.linkDraft = it }, lookup, modifier)
         else -> Unit
     }
     if (draft.type.canBeRequired) {

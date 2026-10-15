@@ -15,6 +15,16 @@ data class FieldDef(
     /** How this field's values sit in the record table; [Storage.NONE] if not there. */
     val storage: Storage get() = if (isMultiList) Storage.NONE else type.storage
 
+    /** Whether this Link field and [other] link to the same kind of thing (and database, for records). */
+    fun linksTheSameWay(other: FieldDef): Boolean {
+        val mine = props as? LinkProps
+        val theirs = other.props as? LinkProps
+        return mine?.source == theirs?.source && mine?.databaseId == theirs?.databaseId
+    }
+
+    /** For a Link field to records, which database and display field; null for other fields. */
+    val recordLink: LinkProps? get() = (props as? LinkProps)?.takeIf { it.source == LinkSource.RECORD }
+
     /** Whether values are text (or may be, as IDs), so text matching and case apply. */
     val isTextual: Boolean get() = isMultiList || storage == Storage.TEXT || storage == Storage.ANY
 
@@ -29,8 +39,9 @@ data class FieldDef(
         isMultiList -> new.isMultiList
         !hasValues -> true
         new.type == FieldType.ID -> type == FieldType.ID
-        // Other values aren't links, and links (uris) mean nothing as other values.
-        new.type == FieldType.LINK || type == FieldType.LINK -> type == new.type
+        // Other values aren't links, links (uris) mean nothing as other values, and links to one
+        // kind of target or database mean nothing for another.
+        new.type == FieldType.LINK || type == FieldType.LINK -> type == new.type && linksTheSameWay(new)
         new.isMultiList -> true
         else -> storage == new.storage
     }

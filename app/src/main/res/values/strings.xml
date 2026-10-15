@@ -226,4 +226,14 @@
     <string name="photo_change">Change</string>
     <string name="photo_choose_again">Choose again</string>
     <string name="photo_unavailable">Photo unavailable (deleted or access lost)</string>
+
+    <string name="link_source_record">Record</string>
+    <string name="link_source_label">Links to</string>
+    <string name="link_database">Database</string>
+    <string name="link_display_field">Show linked records by</string>
+    <string name="link_record_explained">Links each record to one record of the chosen database, shown by the chosen field.</string>
+    <string name="link_record_summary">record in %1$s</string>
+    <string name="record_link_choose">Choose record</string>
+    <string name="record_link_deleted">Linked record deleted</string>
+    <string name="record_link_none_to_choose">That database has no records yet.</string>
 </resources>

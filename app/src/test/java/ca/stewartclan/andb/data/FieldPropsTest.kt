@@ -53,4 +53,20 @@ class FieldPropsTest {
         assertEquals(LinkProps(), FieldProps.decode(FieldType.LINK, FieldProps.encode(LinkProps())))
         assertEquals(LinkProps(LinkSource.PHOTO), FieldProps.decode(FieldType.LINK, """{"source":"photo"}"""))
     }
+
+    @Test
+    fun recordRefRoundTripsAndRejectsOtherUris() {
+        val ref = RecordRef("0b1c-db", 42)
+        assertEquals("andb://0b1c-db/42", ref.uri)
+        assertEquals(ref, RecordRef.parse(ref.uri))
+        assertEquals(null, RecordRef.parse("content://media/42"))
+        assertEquals(null, RecordRef.parse("andb://db/x"))
+        assertEquals(null, RecordRef.parse("andb://db/1/2"))
+    }
+
+    @Test
+    fun recordLinkPropsRoundTrip() {
+        val props = LinkProps(LinkSource.RECORD, "db", 7)
+        assertEquals(props, FieldProps.decode(FieldType.LINK, FieldProps.encode(props)))
+    }
 }

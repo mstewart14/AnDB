@@ -31,6 +31,7 @@ import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.LinkValue
+import ca.stewartclan.andb.data.RecordRef
 
 /** The record being edited, whether it may be changed, and how to report changes. */
 class EditorContext(
@@ -38,7 +39,9 @@ class EditorContext(
     val readOnly: Boolean,
     val onEdit: (FieldDef, String) -> Unit,
     val onToggleChoice: (FieldDef, String) -> Unit,
-    val onLink: (FieldDef, LinkValue?) -> Unit
+    val onLink: (FieldDef, LinkValue?) -> Unit,
+    /** Opens a linked record. */
+    val onOpenRecord: (RecordRef) -> Unit
 )
 
 /**
@@ -76,8 +79,11 @@ private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier)
             val choices = ctx.state.listChoices[field.id].orEmpty()
             ListDropdown(field.name, text, choices, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
         }
-        FieldType.LINK ->
+        FieldType.LINK -> if (field.recordLink != null) {
+            RecordLinkEditor(field, ctx, modifier)
+        } else {
             PhotoEditor(field.name, ctx.state.links[field.id], ctx.readOnly, { ctx.onLink(field, it) }, modifier)
+        }
         else -> TextEditor(field, text, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
     }
 }

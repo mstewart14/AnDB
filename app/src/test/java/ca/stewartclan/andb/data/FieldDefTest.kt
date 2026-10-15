@@ -61,4 +61,14 @@ class FieldDefTest {
         assertTrue(RequiredRule.hasValue(field(FieldType.LINK), LinkValue("u", "a.jpg", null), emptyList()))
         assertFalse(RequiredRule.hasValue(field(FieldType.LINK), null, emptyList()))
     }
+
+    @Test
+    fun linksToAnotherTargetDoNotKeepValues() {
+        val photo = field(FieldType.LINK, LinkProps(LinkSource.PHOTO))
+        val books = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "books"))
+        val authors = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "authors"))
+        assertFalse(photo.keepsValuesAs(books))
+        assertFalse(books.keepsValuesAs(authors))
+        assertTrue(books.keepsValuesAs(field(FieldType.LINK, LinkProps(LinkSource.RECORD, "books", 3))))
+    }
 }

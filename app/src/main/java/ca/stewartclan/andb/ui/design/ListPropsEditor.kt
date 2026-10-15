@@ -202,7 +202,7 @@ private fun LookupEditor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <K> Picker(
+internal fun <K> Picker(
     label: String,
     selected: String?,
     options: List<Pair<K, String>>,

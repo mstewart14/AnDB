@@ -51,6 +51,7 @@ import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdProps
 import ca.stewartclan.andb.data.LinkProps
+import ca.stewartclan.andb.data.LinkSource
 import ca.stewartclan.andb.data.ListProps
 import ca.stewartclan.andb.data.NoProps
 import ca.stewartclan.andb.ui.common.ErrorSnackbar
@@ -250,19 +251,29 @@ private fun fieldSummary(field: FieldDef, databaseNames: Map<String, String>): S
     val parts = mutableListOf(stringResource(field.type.labelRes))
     when (val props = field.props) {
         is IdProps -> parts += stringResource(props.kind.labelRes)
-        is ListProps -> {
-            if (props.multiple) parts += stringResource(R.string.list_summary_multiple)
-            parts += when (val lookup = props.lookup) {
-                null -> pluralStringResource(R.plurals.list_summary_items, props.items.size, props.items.size)
-                else -> databaseNames[lookup.databaseId]?.let { stringResource(R.string.list_summary_lookup, it) }
-                    ?: stringResource(R.string.list_summary_lookup_missing)
-            }
-        }
-        is LinkProps -> parts += stringResource(R.string.link_source_photo)
+        is ListProps -> parts += listSummary(props, databaseNames)
+        is LinkProps -> parts += linkSummary(props, databaseNames)
         NoProps -> Unit
     }
     if (field.required) parts += stringResource(R.string.design_summary_required)
     return parts.joinToString(" · ")
+}
+
+@Composable
+private fun listSummary(props: ListProps, databaseNames: Map<String, String>): List<String> {
+    val source = when (val lookup = props.lookup) {
+        null -> pluralStringResource(R.plurals.list_summary_items, props.items.size, props.items.size)
+        else -> databaseNames[lookup.databaseId]?.let { stringResource(R.string.list_summary_lookup, it) }
+            ?: stringResource(R.string.list_summary_lookup_missing)
+    }
+    return if (props.multiple) listOf(stringResource(R.string.list_summary_multiple), source) else listOf(source)
+}
+
+@Composable
+private fun linkSummary(props: LinkProps, databaseNames: Map<String, String>): String = when (props.source) {
+    LinkSource.PHOTO -> stringResource(R.string.link_source_photo)
+    LinkSource.RECORD -> databaseNames[props.databaseId]?.let { stringResource(R.string.link_record_summary, it) }
+        ?: stringResource(R.string.list_summary_lookup_missing)
 }
 
 @Composable

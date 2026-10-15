@@ -129,7 +129,7 @@ private fun Thumbnail(link: LinkValue?, linking: Boolean, onClick: () -> Unit) {
 
 /** The photo full screen; the saved thumbnail stands in if the photo can't be read. Tap to close. */
 @Composable
-private fun PhotoViewer(link: LinkValue, photos: PhotoAccess, onClose: () -> Unit) {
+fun PhotoViewer(link: LinkValue, photos: PhotoAccess, onClose: () -> Unit) {
     val screenPx = LocalWindowInfo.current.containerSize.let { maxOf(it.width, it.height) }
     val thumbnail = rememberThumbnail(link.thumbnail)
     val full by produceState<ImageBitmap?>(null, link.uri) { value = photos.load(link.uri, screenPx) }
@@ -155,7 +155,7 @@ private fun PhotoViewer(link: LinkValue, photos: PhotoAccess, onClose: () -> Uni
 }
 
 @Composable
-private fun rememberPhotoAccess(): PhotoAccess {
+fun rememberPhotoAccess(): PhotoAccess {
     val context = LocalContext.current
     return remember(context) { (context.applicationContext as AnDbApplication).photos }
 }

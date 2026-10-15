@@ -43,7 +43,12 @@ fun AnDbNavHost() {
         }
         composable<FilterEditorRoute> { FilterEditorScreen(onDone = back) }
         composable<ViewEditorRoute> { ViewEditorScreen(onDone = back) }
-        composable<RecordRoute> { RecordScreen(onBack = back) }
+        composable<RecordRoute> {
+            RecordScreen(
+                onBack = back,
+                onOpenRecord = { db, record -> navController.navigate(RecordRoute(db, record)) }
+            )
+        }
         composable<DesignRoute> { DesignScreen(onBack = back) }
     }
 }

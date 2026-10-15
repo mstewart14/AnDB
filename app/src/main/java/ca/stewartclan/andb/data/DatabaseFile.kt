@@ -44,7 +44,9 @@ internal object DatabaseFile {
                 "CREATE TABLE andb_filter (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
                     "match_all INTEGER NOT NULL DEFAULT 1, conditions TEXT NOT NULL DEFAULT '[]')"
             )
-        }
+        },
+        // 5: record ids are never reused (AUTOINCREMENT), as records can be linked to.
+        { rebuildRecordTable(recordColumns(readFields())) }
     )
 
     val SCHEMA_VERSION = migrations.size + 1
@@ -60,7 +62,10 @@ internal object DatabaseFile {
 
     /** Columns every record table starts with; field columns follow. */
     const val SYSTEM_COLUMNS = "_id, _created, _modified"
-    const val SYSTEM_COLUMNS_DDL = "_id INTEGER PRIMARY KEY, _created TEXT NOT NULL, _modified TEXT NOT NULL"
+
+    /** `AUTOINCREMENT`: record ids are never reused, so a link can't come to mean another record. */
+    const val SYSTEM_COLUMNS_DDL =
+        "_id INTEGER PRIMARY KEY AUTOINCREMENT, _created TEXT NOT NULL, _modified TEXT NOT NULL"
 
     fun columnName(fieldId: Long) = "f$fieldId"
 

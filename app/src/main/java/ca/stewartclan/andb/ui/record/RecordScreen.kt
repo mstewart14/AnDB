@@ -63,7 +63,11 @@ data class RecordRoute(val databaseId: String, val recordId: Long)
 const val NEW_RECORD_ID = 0L
 
 @Composable
-fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory)) {
+fun RecordScreen(
+    onBack: () -> Unit,
+    onOpenRecord: (databaseId: String, recordId: Long) -> Unit,
+    viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory)
+) {
     val database by viewModel.database.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val locked by viewModel.locked.collectAsStateWithLifecycle()
@@ -88,6 +92,8 @@ fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(fact
     BackHandler { go(BACK) }
     // Switching apps or turning the screen off saves too.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.saveInBackground() }
+    // Linked records may have changed while another screen was shown.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshLinks() }
     LaunchedEffect(finished) { if (finished) onBack() }
 
     RecordContent(
@@ -103,7 +109,12 @@ fun RecordScreen(onBack: () -> Unit, viewModel: RecordViewModel = viewModel(fact
             onDuplicate = { viewModel.duplicate() },
             onDelete = { confirmDelete = true }
         ),
-        editor = { viewModel.editorContext(it, locked) }
+        editor = {
+            viewModel.editorContext(it, locked) { ref ->
+                viewModel.saveInBackground()
+                onOpenRecord(ref.databaseId, ref.recordId)
+            }
+        }
     )
 
     if (confirmDelete) DeleteRecordDialog(onConfirm = { viewModel.delete() }, onClose = { confirmDelete = false })

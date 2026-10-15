@@ -226,4 +226,30 @@ class RecordRepositoryTest {
         assertEquals("content://p/1", records.record(id, r)!!.values[f.id])
         repository.deleteField(id, f.id)
     }
+
+    @Test
+    fun recordIdsAreNeverReused() = runBlocking {
+        val id = repository.create("Books")
+        records.create(id)
+        val last = records.create(id)
+        records.delete(id, last)
+
+        assertTrue(records.create(id) > last)
+    }
+
+    @Test
+    fun recordLinksAreStoredAndChangingTheTargetClearsThem() = runBlocking {
+        val authors = repository.create("Authors")
+        val name = repository.addField(authors, "Name", FieldType.STRING)
+        val leGuin = records.insert(authors, mapOf(name.id to "Le Guin"), emptyMap())
+        val books = repository.create("Books")
+        val author = repository.addField(books, "Author", FieldType.LINK, LinkProps(LinkSource.RECORD, authors))
+        val link = LinkValue(RecordRef(authors, leGuin).uri, "Le Guin", null)
+        val book = records.insert(books, mapOf(author.id to link), emptyMap())
+
+        assertEquals(link, records.record(books, book)!!.values[author.id])
+
+        repository.updateField(books, author.copy(props = LinkProps(LinkSource.RECORD, books)))
+        assertNull(records.record(books, book)!!.values[author.id])
+    }
 }
