@@ -1,6 +1,31 @@
 <resources>
     <string name="app_name">AnDB</string>
+
+    <string name="action_create">Create</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_more">More options</string>
+
     <string name="chooser_empty_title">No databases yet</string>
     <string name="chooser_empty_body">Tap + to design your first database.</string>
     <string name="chooser_new_database">New database</string>
+    <string name="chooser_rename_database">Rename database</string>
+    <string name="chooser_name_label">Name</string>
+    <string name="chooser_name_blank">Enter a name</string>
+    <string name="chooser_name_too_long">Maximum length is %1$d</string>
+    <string name="chooser_name_duplicate">A database with this name already exists</string>
+    <string name="chooser_delete_title">Delete “%1$s”?</string>
+    <plurals name="chooser_delete_body">
+        <item quantity="one">Its design and %1$d record will be permanently deleted.</item>
+        <item quantity="other">Its design and %1$d records will be permanently deleted.</item>
+    </plurals>
+    <plurals name="chooser_record_count">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <plurals name="chooser_field_count">
+        <item quantity="one">%1$d field</item>
+        <item quantity="other">%1$d fields</item>
+    </plurals>
 </resources>
