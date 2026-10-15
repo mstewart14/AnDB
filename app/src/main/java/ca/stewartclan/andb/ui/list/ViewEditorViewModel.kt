@@ -58,7 +58,6 @@ data class ViewEditorState(
 class ViewEditorViewModel(
     private val repository: DatabaseRepository,
     private val viewStore: ViewRepository,
-    private val defaultViewName: String,
     private val newViewName: (Int) -> String,
     private val databaseId: String,
     private val viewId: Long
@@ -71,7 +70,7 @@ class ViewEditorViewModel(
     init {
         launchReporting {
             val fields = repository.fields(databaseId)
-            val views = viewStore.views(databaseId, defaultViewName)
+            val views = viewStore.views(databaseId)
             val view = views.find { it.id == viewId }
             val draft = if (view != null) {
                 ViewDraft(view.id, view.name, view.showsAllFields, view.columns, view.sort)
@@ -127,7 +126,6 @@ class ViewEditorViewModel(
                 ViewEditorViewModel(
                     app.repository,
                     app.views,
-                    app.getString(R.string.view_default_name),
                     { n -> app.getString(R.string.view_numbered_name, n) },
                     route.databaseId,
                     route.viewId

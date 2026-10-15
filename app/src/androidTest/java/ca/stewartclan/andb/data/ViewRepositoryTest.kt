@@ -25,7 +25,7 @@ class ViewRepositoryTest {
         dir.deleteRecursively()
         repository = DatabaseRepository(dir)
         records = RecordRepository(repository)
-        views = ViewRepository(repository)
+        views = ViewRepository(repository, "All fields")
     }
 
     @After
@@ -36,8 +36,8 @@ class ViewRepositoryTest {
     @Test
     fun firstViewShowsAllFieldsAndIsCreatedOnce() = runBlocking {
         val id = repository.create("Books")
-        val first = views.views(id, "All fields")
-        val again = views.views(id, "Ignored")
+        val first = views.views(id)
+        val again = views.views(id)
 
         assertEquals(listOf("All fields"), first.map { it.name })
         assertTrue(first.single().showsAllFields)
@@ -49,16 +49,16 @@ class ViewRepositoryTest {
     fun saveAddsAndUpdatesViewsAndRemembersCurrent() = runBlocking {
         val id = repository.create("Books")
         val title = repository.addField(id, "Title", FieldType.STRING)
-        views.views(id, "All fields")
+        views.views(id)
 
         val viewId = views.save(
             id,
             ListView(0, 0, "By title", listOf(ViewColumn(title.id, ColumnWidth.WIDE)), listOf(SortKey(title.id)))
         )
-        views.save(id, views.views(id, "x").last().copy(sort = listOf(SortKey(title.id, descending = true))))
+        views.save(id, views.views(id).last().copy(sort = listOf(SortKey(title.id, descending = true))))
         views.setCurrentView(id, viewId)
 
-        val saved = views.views(id, "x").last()
+        val saved = views.views(id).last()
         assertEquals("By title", saved.name)
         assertEquals(listOf(ViewColumn(title.id, ColumnWidth.WIDE)), saved.columns)
         assertEquals(listOf(SortKey(title.id, descending = true)), saved.sort)
@@ -70,7 +70,7 @@ class ViewRepositoryTest {
         val id = repository.create("Books")
         val title = repository.addField(id, "Title", FieldType.STRING)
         val pages = repository.addField(id, "Pages", FieldType.INTEGER)
-        val first = views.views(id, "All fields").single()
+        val first = views.views(id).single()
         views.save(
             id,
             first.copy(columns = listOf(ViewColumn(title.id), ViewColumn(pages.id)), sort = listOf(SortKey(pages.id)))
@@ -78,7 +78,7 @@ class ViewRepositoryTest {
 
         repository.deleteField(id, pages.id)
 
-        val view = views.views(id, "x").single()
+        val view = views.views(id).single()
         assertEquals(listOf(ViewColumn(title.id)), view.columns)
         assertEquals(emptyList<SortKey>(), view.sort)
         assertTrue(runCatching { views.delete(id, view.id) }.isFailure)

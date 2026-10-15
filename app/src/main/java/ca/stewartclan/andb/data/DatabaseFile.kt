@@ -14,6 +14,7 @@ import java.io.File
  *   renaming a field never touches the record table. ID columns have a unique index `u_f<field id>`.
  * - `list_f<field id>`: the choices of a multiple-choice List field, one row per record and choice.
  * - `andb_view`: named list views, with their columns and sort keys as JSON.
+ * - `andb_filter`: saved filters, with their conditions as JSON.
  */
 internal object DatabaseFile {
     const val EXTENSION = "db"
@@ -34,6 +35,13 @@ internal object DatabaseFile {
                 "CREATE TABLE andb_view (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
                     "columns TEXT NOT NULL DEFAULT '[]', sort TEXT NOT NULL DEFAULT '[]')"
             )
+        },
+        // 4: saved filters.
+        {
+            execSQL(
+                "CREATE TABLE andb_filter (id INTEGER PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, " +
+                    "match_all INTEGER NOT NULL DEFAULT 1, conditions TEXT NOT NULL DEFAULT '[]')"
+            )
         }
     )
 
@@ -44,6 +52,9 @@ internal object DatabaseFile {
 
     /** `andb_meta` key of the list view last shown. */
     const val META_CURRENT_VIEW = "current_view"
+
+    /** `andb_meta` key of the filter applied to the list, if any. */
+    const val META_CURRENT_FILTER = "current_filter"
 
     /** Columns every record table starts with; field columns follow. */
     const val SYSTEM_COLUMNS = "_id, _created, _modified"

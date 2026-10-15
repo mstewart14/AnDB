@@ -21,9 +21,10 @@ object FieldValues {
     const val MAX_RATING = 5
     const val MAX_SCALE = 10
 
-    private val dateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-    private val timeFormat = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-    private val timestampFormat = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+    // Made on use, so they follow the device's current language and region.
+    private val dateFormat get() = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+    private val timeFormat get() = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+    private val timestampFormat get() = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
 
     /** The editor text for a stored [value]; empty when unset. */
     fun toDraft(value: Any?): String = when (value) {

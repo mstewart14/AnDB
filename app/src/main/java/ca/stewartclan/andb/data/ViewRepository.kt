@@ -4,17 +4,17 @@ import android.database.sqlite.SQLiteDatabase
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
-/** List views of AnDB databases. Every database has at least one. */
-class ViewRepository(private val databases: DatabaseRepository) {
+/**
+ * List views of AnDB databases. Every database has at least one: the first, named [defaultName],
+ * shows all fields.
+ */
+class ViewRepository(private val databases: DatabaseRepository, private val defaultName: String) {
     private val json = Json { ignoreUnknownKeys = true }
     private val columnsSerializer = ListSerializer(ViewColumn.serializer())
     private val sortSerializer = ListSerializer(SortKey.serializer())
 
-    /**
-     * The views of database [id] in order, creating the first one, named [defaultName] and showing
-     * all fields, if there are none yet.
-     */
-    suspend fun views(id: String, defaultName: String): List<ListView> {
+    /** The views of database [id] in order, creating the first one if there are none yet. */
+    suspend fun views(id: String): List<ListView> {
         val views = databases.read(id) { readViews() }
         if (views.isNotEmpty()) return views
         return databases.write(id) {

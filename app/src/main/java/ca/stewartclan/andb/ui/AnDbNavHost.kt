@@ -8,6 +8,8 @@ import ca.stewartclan.andb.ui.chooser.ChooserRoute
 import ca.stewartclan.andb.ui.chooser.ChooserScreen
 import ca.stewartclan.andb.ui.design.DesignRoute
 import ca.stewartclan.andb.ui.design.DesignScreen
+import ca.stewartclan.andb.ui.list.FilterEditorRoute
+import ca.stewartclan.andb.ui.list.FilterEditorScreen
 import ca.stewartclan.andb.ui.list.RecordListRoute
 import ca.stewartclan.andb.ui.list.RecordListScreen
 import ca.stewartclan.andb.ui.list.ViewEditorRoute
@@ -35,9 +37,11 @@ fun AnDbNavHost() {
                 onBack = back,
                 onOpenRecord = { db, record -> navController.navigate(RecordRoute(db, record)) },
                 onEditDesign = { navController.navigate(DesignRoute(it)) },
-                onEditView = { db, view -> navController.navigate(ViewEditorRoute(db, view)) }
+                onEditView = { db, view -> navController.navigate(ViewEditorRoute(db, view)) },
+                onEditFilter = { db, filter -> navController.navigate(FilterEditorRoute(db, filter)) }
             )
         }
+        composable<FilterEditorRoute> { FilterEditorScreen(onDone = back) }
         composable<ViewEditorRoute> { ViewEditorScreen(onDone = back) }
         composable<RecordRoute> { RecordScreen(onBack = back) }
         composable<DesignRoute> { DesignScreen(onBack = back) }

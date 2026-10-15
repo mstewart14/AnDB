@@ -64,18 +64,20 @@ class ListActions(
     val onOpen: (Long) -> Unit,
     val onNew: () -> Unit,
     val onEditDesign: () -> Unit,
-    val onSort: (FieldDef) -> Unit,
     /** Starts or changes a search; null ends it. */
     val onFind: (FindQuery?) -> Unit,
-    val views: ViewActions
+    val views: ViewActions,
+    val filters: FilterActions
 )
 
-/** Choosing, adding, editing and deleting list views. */
+/** Choosing, adding, editing and deleting list views, and sorting the current one. */
 class ViewActions(
     val onSelect: (ListView) -> Unit,
     val onNew: () -> Unit,
     val onEdit: () -> Unit,
-    val onDelete: () -> Unit
+    val onDelete: () -> Unit,
+    /** Sorts by a field, as tapping its column header does; saved in the view. */
+    val onSort: (FieldDef) -> Unit
 )
 
 @Composable
@@ -84,6 +86,7 @@ fun RecordListScreen(
     onOpenRecord: (databaseId: String, recordId: Long) -> Unit,
     onEditDesign: (databaseId: String) -> Unit,
     onEditView: (databaseId: String, viewId: Long) -> Unit,
+    onEditFilter: (databaseId: String, filterId: Long) -> Unit,
     viewModel: RecordListViewModel = viewModel(factory = RecordListViewModel.Factory)
 ) {
     val database by viewModel.database.collectAsStateWithLifecycle()
@@ -92,11 +95,18 @@ fun RecordListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     ErrorSnackbar(error, snackbarHostState, viewModel::errorShown)
     var confirmDeleteView by rememberSaveable { mutableStateOf(false) }
+    var choosingFilter by rememberSaveable { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
         viewModel.reload()
         onPauseOrDispose {}
     }
     val db = viewModel.databaseId
+    val filterActions = FilterActions(
+        onChoose = { choosingFilter = true },
+        onSelect = viewModel::setFilter,
+        onNew = { onEditFilter(db, NEW_FILTER_ID) },
+        onEdit = { onEditFilter(db, it.id) }
+    )
     // While finding, Back ends the search rather than leaving the list.
     BackHandler(enabled = state?.find != null) { viewModel.setFind(null) }
 
@@ -109,17 +119,21 @@ fun RecordListScreen(
             onOpen = { onOpenRecord(db, it) },
             onNew = { onOpenRecord(db, NEW_RECORD_ID) },
             onEditDesign = { onEditDesign(db) },
-            onSort = viewModel::sortBy,
             onFind = viewModel::setFind,
             views = ViewActions(
                 onSelect = viewModel::selectView,
                 onNew = { onEditView(db, NEW_VIEW_ID) },
                 onEdit = { state?.view?.let { onEditView(db, it.id) } },
-                onDelete = { confirmDeleteView = true }
-            )
+                onDelete = { confirmDeleteView = true },
+                onSort = viewModel::sortBy
+            ),
+            filters = filterActions
         )
     )
 
+    if (choosingFilter) {
+        state?.let { FilterDialog(it.filters, it.filter, filterActions, onClose = { choosingFilter = false }) }
+    }
     if (confirmDeleteView) {
         AlertDialog(
             onDismissRequest = { confirmDeleteView = false },
@@ -150,6 +164,12 @@ fun RecordListContent(
         topBar = {
             Column {
                 ListTopBar(title, state, actions)
+                val filter = state?.filter
+                if (filter != null && state.find == null) {
+                    ActiveFilterRow(filter, state.rows.size, state.totalCount, actions.filters.onChoose) {
+                        actions.filters.onSelect(null)
+                    }
+                }
                 state?.find?.let {
                     FindOptions(it, state.searchable, state.rows.size, state.totalCount, actions.onFind)
                 }
@@ -164,7 +184,7 @@ fun RecordListContent(
     ) { innerPadding ->
         when {
             state == null -> Unit
-            state.rows.isEmpty() && state.find != null && state.totalCount > 0 -> Text(
+            state.rows.isEmpty() && (state.find != null || state.filter != null) && state.totalCount > 0 -> Text(
                 stringResource(R.string.find_no_match),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(innerPadding).padding(24.dp)
@@ -174,7 +194,7 @@ fun RecordListContent(
                 columns = state.columns,
                 rows = state.rows,
                 sort = state.view.sort,
-                onSort = actions.onSort,
+                onSort = actions.views.onSort,
                 onOpen = actions.onOpen,
                 contentPadding = innerPadding
             )
@@ -268,6 +288,13 @@ private fun ListMenu(canDeleteView: Boolean, actions: ListActions) {
                 onClick = {
                     open = false
                     actions.onEditDesign()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.filter_menu)) },
+                onClick = {
+                    open = false
+                    actions.filters.onChoose()
                 }
             )
             DropdownMenuItem(

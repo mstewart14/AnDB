@@ -8,12 +8,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.toRoute
 import ca.stewartclan.andb.AnDbApplication
-import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.ColumnWidth
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
+import ca.stewartclan.andb.data.Filter
+import ca.stewartclan.andb.data.FilterRepository
 import ca.stewartclan.andb.data.ListView
 import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
@@ -41,36 +42,44 @@ data class ListUiState(
     val views: List<ListView>,
     val view: ListView,
     val columns: List<ListColumn>,
-    /** The rows shown: all records, or those matching [find]. */
+    /** The rows shown: all records, or those passing [filter] and matching [find]. */
     val rows: List<RecordRow>,
     val totalCount: Int,
     val hasFields: Boolean,
     /** Fields Find can search, for choosing one. */
     val searchable: List<FieldDef>,
     /** The search in progress, or null when not finding. */
-    val find: FindQuery?
+    val find: FindQuery?,
+    val filters: List<Filter>,
+    /** The filter applied, or null for all records. */
+    val filter: Filter?
 )
 
-/** Everything loaded for the current view, before Find narrows it. */
+/** Everything loaded for the current view, before the filter and Find narrow it. */
 private class Loaded(
     val views: List<ListView>,
     val view: ListView,
     val columns: List<ListColumn>,
-    val rows: List<RecordRow>,
     val fields: List<FieldDef>,
-    val searchable: List<FieldDef>,
-    /** Per record id, what each searchable field shows. */
-    val texts: Map<Long, Map<Long, String>>
-)
+    val entries: List<Entry>,
+    val filters: List<Filter>,
+    val filter: Filter?
+) {
+    val searchable: List<FieldDef> get() = fields.filter { it.isSearchable }
+}
+
+/** A record with its list row and what each searchable field shows, for Find. */
+private class Entry(val record: Record, val row: RecordRow, val texts: Map<Long, String>)
+
+private val FieldDef.isSearchable: Boolean get() = canBeColumn && type != FieldType.BOOLEAN
 
 class RecordListViewModel(
     private val repository: DatabaseRepository,
     private val records: RecordRepository,
     private val viewStore: ViewRepository,
+    private val filterStore: FilterRepository,
     private val browseOrder: BrowseOrder,
     private val savedState: SavedStateHandle,
-    /** Name of the view every database starts with. */
-    private val defaultViewName: String,
     val databaseId: String
 ) : ReportingViewModel() {
 
@@ -105,6 +114,12 @@ class RecordListViewModel(
         load(view.id)
     }
 
+    /** Applies [filter] to the list, or none; remembered for the database. */
+    fun setFilter(filter: Filter?) = launchReporting {
+        filterStore.setCurrentFilter(databaseId, filter?.id)
+        load(_state.value?.view?.id)
+    }
+
     /** Starts finding, or changes what to find; null stops and shows all records again. */
     fun setFind(query: FindQuery?) {
         savedState[KEY_FIND] = query?.let { Json.encodeToString(FindQuery.serializer(), it) }
@@ -125,21 +140,21 @@ class RecordListViewModel(
     private suspend fun load(viewId: Long?) {
         if (repository.databases.value == null) repository.refresh()
         val fields = repository.fields(databaseId)
-        val views = viewStore.views(databaseId, defaultViewName)
+        val views = viewStore.views(databaseId)
         val wanted = viewId ?: viewStore.currentViewId(databaseId)
         val view = views.find { it.id == wanted } ?: views.first()
         val columns = columnsOf(view, fields)
-        val all = records.records(databaseId, view.sort)
-        val searchable = fields.filter { it.canBeColumn && it.type != FieldType.BOOLEAN }
-        loaded = Loaded(
-            views,
-            view,
-            columns,
-            all.map { record -> RecordRow(record.id, columns.map { shownText(it.field, record) }) },
-            fields,
-            searchable,
-            all.associate { record -> record.id to searchable.associate { it.id to shownText(it, record) } }
-        )
+        val filters = filterStore.filters(databaseId)
+        val filterId = filterStore.currentFilterId(databaseId)
+        val searchable = fields.filter { it.isSearchable }
+        val entries = records.records(databaseId, view.sort).map { record ->
+            Entry(
+                record,
+                RecordRow(record.id, columns.map { shownText(it.field, record) }),
+                searchable.associate { it.id to shownText(it, record) }
+            )
+        }
+        loaded = Loaded(views, view, columns, fields, entries, filters, filters.find { it.id == filterId })
         publish()
     }
 
@@ -147,18 +162,23 @@ class RecordListViewModel(
     private fun publish() {
         val data = loaded ?: return
         val query = find
-        val matches = query?.matcher()
-        val rows = if (matches == null) data.rows else data.rows.filter { matches(data.texts[it.id].orEmpty()) }
+        val matches = query?.matcher() ?: { true }
+        val fieldsById = data.fields.associateBy { it.id }
+        val rows = data.entries.filter { entry ->
+            data.filter?.let { FilterMatcher.matches(it, fieldsById, entry.record) } != false && matches(entry.texts)
+        }.map { it.row }
         browseOrder[databaseId] = rows.map { it.id }
         _state.value = ListUiState(
             views = data.views,
             view = data.view,
             columns = data.columns,
             rows = rows,
-            totalCount = data.rows.size,
+            totalCount = data.entries.size,
             hasFields = data.fields.isNotEmpty(),
             searchable = data.searchable,
-            find = query
+            find = query,
+            filters = data.filters,
+            filter = data.filter
         )
     }
 
@@ -190,9 +210,9 @@ class RecordListViewModel(
                     app.repository,
                     app.records,
                     app.views,
+                    app.filters,
                     app.browseOrder,
                     savedState,
-                    app.getString(R.string.view_default_name),
                     savedState.toRoute<RecordListRoute>().databaseId
                 )
             }
