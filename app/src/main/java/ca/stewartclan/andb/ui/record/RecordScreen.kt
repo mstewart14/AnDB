@@ -351,11 +351,17 @@ private fun PrevNextBar(state: RecordUiState, onGo: (Int) -> Unit) {
                     stringResource(R.string.record_position, state.index + 1, state.recordIds.size)
                 }
             )
-            IconButton(onClick = { onGo(1) }, enabled = state.index < state.recordIds.lastIndex) {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = stringResource(R.string.record_next)
-                )
+            // Past the last record, next is a new one (but not another while this new one is blank).
+            val atEnd = state.index >= state.recordIds.lastIndex
+            IconButton(onClick = { onGo(1) }, enabled = !(state.isNew && state.isBlank)) {
+                if (atEnd) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.list_new_record))
+                } else {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.record_next)
+                    )
+                }
             }
         }
     }

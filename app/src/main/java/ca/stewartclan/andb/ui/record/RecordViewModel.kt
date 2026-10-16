@@ -161,13 +161,17 @@ class RecordViewModel(
     }
 
     /**
-     * Saves, then shows the record [by] places away in browsing order. If the edits can't be saved
-     * yet, stays and points out the empty required fields.
+     * Saves, then shows the record [by] places away in browsing order; next from the last record
+     * (or a new one) starts a new record. If the edits can't be saved yet, stays and points out the
+     * empty required fields.
      */
     fun go(by: Int) {
         val state = _state.value ?: return
-        val target = state.recordIds.getOrNull(state.index + by) ?: return
-        launchReporting { if (save()) load(target) else showMissing() }
+        val target = state.recordIds.getOrNull(state.index + by)
+        when {
+            target != null -> launchReporting { if (save()) load(target) else showMissing() }
+            by > 0 -> newRecord()
+        }
     }
 
     /** Saves and starts a new record; if the edits can't be saved yet, points out what's missing. */
