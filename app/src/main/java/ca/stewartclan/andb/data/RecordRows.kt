@@ -22,14 +22,8 @@ internal fun SQLiteDatabase.writeValues(
     }
     val (links, plain) = columns.entries.partition { byId[it.key]?.type == FieldType.LINK }
     val sets = plain.joinToString("") { "${DatabaseFile.columnName(it.key)} = ?, " }
-    execSQL(
-        "UPDATE record SET ${sets}_modified = ? WHERE _id = ?",
-        (
-            plain.map {
-                it.value
-            } + modified + recordId
-            ).toTypedArray()
-    )
+    val args = plain.map { it.value } + modified + recordId
+    execSQL("UPDATE record SET ${sets}_modified = ? WHERE _id = ?", args.toTypedArray())
     // A link's uri goes in the column, its snapshot in the field's link table.
     links.forEach { (fieldId, value) -> writeLink(fieldId, recordId, value as? LinkValue) }
     values.filterKeys { byId[it]?.isMultiLink == true }.forEach { (fieldId, value) ->

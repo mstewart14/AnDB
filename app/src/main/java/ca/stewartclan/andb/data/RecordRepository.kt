@@ -2,7 +2,6 @@ package ca.stewartclan.andb.data
 
 import android.database.sqlite.SQLiteConstraintException
 import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteException
 
 /** Records of AnDB databases. Changes go through [databases] so they're serialised with design changes. */
 class RecordRepository(private val databases: DatabaseRepository) {
@@ -93,8 +92,7 @@ class RecordRepository(private val databases: DatabaseRepository) {
             execSQL("DELETE FROM ${DatabaseFile.listTable(it.id)} WHERE record_id = ?", arrayOf(recordId))
         }
         fields.filter { it.type == FieldType.LINK }.forEach {
-            val table = if (it.isMultiLink) DatabaseFile.linkListTable(it.id) else DatabaseFile.linkTable(it.id)
-            execSQL("DELETE FROM $table WHERE record_id = ?", arrayOf(recordId))
+            execSQL("DELETE FROM ${DatabaseFile.linksTable(it)} WHERE record_id = ?", arrayOf(recordId))
         }
         val photos = storedPhotos(recordId)
         execSQL("DELETE FROM record WHERE _id = ?", arrayOf(recordId))
@@ -178,7 +176,7 @@ class RecordRepository(private val databases: DatabaseRepository) {
         if (databases.databases.value == null) databases.refresh()
         val uri = RecordRef(id, recordId).uri
         return databases.databases.value.orEmpty().flatMap { db ->
-            try {
+            unlessUnreadable({ emptyList() }) {
                 databases.read(db.id) {
                     readFields().filter { it.recordLink?.databaseId == id }.map { field ->
                         val sql = if (field.isMultiLink) {
@@ -192,10 +190,6 @@ class RecordRepository(private val databases: DatabaseRepository) {
                         Backlinks(db.id, db.name, field, ids)
                     }
                 }
-            } catch (_: SQLiteException) {
-                emptyList()
-            } catch (_: IllegalStateException) {
-                emptyList()
             }
         }
     }

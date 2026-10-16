@@ -34,10 +34,7 @@ internal fun SQLiteDatabase.clearRecords() {
     execSQL("DELETE FROM record")
     execSQL("DELETE FROM andb_photo")
     fields.filter { it.isMultiList }.forEach { execSQL("DELETE FROM ${DatabaseFile.listTable(it.id)}") }
-    fields.filter { it.type == FieldType.LINK }.forEach {
-        val table = if (it.isMultiLink) DatabaseFile.linkListTable(it.id) else DatabaseFile.linkTable(it.id)
-        execSQL("DELETE FROM $table")
-    }
+    fields.filter { it.type == FieldType.LINK }.forEach { execSQL("DELETE FROM ${DatabaseFile.linksTable(it)}") }
     fields.filter { it.type == FieldType.ID }.forEach { deleteMeta(DatabaseFile.nextIdKey(it.id)) }
     // Record ids restart too; sqlite_sequence exists once an AUTOINCREMENT table has had a row.
     val hasSequence = longQuery("SELECT COUNT(*) FROM sqlite_master WHERE name = 'sqlite_sequence'") > 0

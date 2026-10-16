@@ -2,7 +2,6 @@ package ca.stewartclan.andb.ui.common
 
 import android.content.ContentResolver
 import android.net.Uri
-import android.provider.OpenableColumns
 import ca.stewartclan.andb.data.copyAtMost
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -30,14 +29,7 @@ class FileAccess(private val resolver: ContentResolver) {
     }
 
     /** The name [uri]'s file goes by, if its provider says. */
-    suspend fun displayName(uri: Uri): String? = withContext(Dispatchers.IO) {
-        try {
-            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
-        } catch (_: SecurityException) {
-            null
-        }
-    }
+    suspend fun displayName(uri: Uri): String? = withContext(Dispatchers.IO) { resolver.displayName(uri) }
 
     /** Opens file [uri] for reading; the caller closes it. */
     suspend fun open(uri: Uri): InputStream = withContext(Dispatchers.IO) {

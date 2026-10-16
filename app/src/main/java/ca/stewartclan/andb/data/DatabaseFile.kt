@@ -1,6 +1,7 @@
 package ca.stewartclan.andb.data
 
 import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
 import androidx.core.database.sqlite.transaction
 import java.io.File
 
@@ -78,6 +79,9 @@ internal object DatabaseFile {
     fun linkTable(fieldId: Long) = "link_f$fieldId"
 
     fun linkListTable(fieldId: Long) = "links_f$fieldId"
+
+    /** The table holding Link [field]'s links: its snapshots, or its link list if it allows several. */
+    fun linksTable(field: FieldDef) = if (field.isMultiLink) linkListTable(field.id) else linkTable(field.id)
 
     /** `andb_meta` key holding the next value of an increment ID field. */
     fun nextIdKey(fieldId: Long) = "next_id.$fieldId"
@@ -163,6 +167,18 @@ internal fun SQLiteDatabase.rebuildRecordTable(columns: List<RecordColumn>) {
     execSQL("DROP TABLE record")
     execSQL("ALTER TABLE record_new RENAME TO record")
     columns.filter { it.unique }.forEach { createUniqueIndex(it.name) }
+}
+
+/**
+ * [block]'s result, or [fallback]'s if a database it reads is gone or can't be read, as when one
+ * database looks into another that was deleted or is damaged.
+ */
+internal inline fun <T> unlessUnreadable(fallback: () -> T, block: () -> T): T = try {
+    block()
+} catch (_: SQLiteException) {
+    fallback()
+} catch (_: IllegalStateException) {
+    fallback()
 }
 
 internal fun SQLiteDatabase.deleteMeta(key: String) {

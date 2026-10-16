@@ -175,11 +175,7 @@ internal fun ChoiceChips(field: FieldDef, ctx: EditorContext, modifier: Modifier
     val chosen = ctx.state.chosen[field.id].orEmpty()
     val choices = ctx.state.listChoices[field.id].orEmpty()
     Column(modifier) {
-        Text(
-            field.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        FieldLabel(field.name)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             (choices + chosen.filter { it !in choices }).forEach { choice ->
                 FilterChip(
@@ -191,4 +187,10 @@ internal fun ChoiceChips(field: FieldDef, ctx: EditorContext, modifier: Modifier
             }
         }
     }
+}
+
+/** The name above a field's value, for editors that aren't text boxes with their own label. */
+@Composable
+internal fun FieldLabel(name: String) {
+    Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

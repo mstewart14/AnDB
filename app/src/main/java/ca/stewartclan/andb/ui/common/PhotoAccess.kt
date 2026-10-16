@@ -1,18 +1,17 @@
 package ca.stewartclan.andb.ui.common
 
 import android.content.ContentResolver
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.provider.OpenableColumns
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.scale
 import androidx.core.net.toUri
 import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.RecordRepository
@@ -31,12 +30,7 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
 
     /** Keeps read access to picked photo [uri] and makes its link value, snapshot included. */
     suspend fun link(uri: Uri): LinkValue = withContext(Dispatchers.IO) {
-        try {
-            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (e: SecurityException) {
-            // Still readable until the app closes; the snapshot keeps the record showing after that.
-            Log.w(TAG, "No lasting access to $uri", e)
-        }
+        resolver.keepReadAccess(uri)
         val thumbnail = decode(uri, THUMBNAIL_PX)?.jpeg(THUMBNAIL_QUALITY)
         LinkValue(uri.toString(), name(uri), thumbnail)
     }
@@ -61,13 +55,7 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
         when {
             link.photo != null -> true
             StoredPhoto.isStored(link.uri) -> records.storedPhoto(databaseId, link.uri) != null
-            else -> try {
-                link.uri.toUri().takeIf { it.isContent }?.let { resolver.openInputStream(it) }?.use { true } ?: false
-            } catch (_: IOException) {
-                false
-            } catch (_: SecurityException) {
-                false
-            }
+            else -> resolver.canRead(link.uri.toUri())
         }
     }
 
@@ -81,22 +69,20 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
         bitmap?.asImageBitmap()
     }
 
-    private fun name(uri: Uri): String = displayName(uri) ?: uri.lastPathSegment.orEmpty()
+    private fun name(uri: Uri): String = resolver.displayName(uri) ?: uri.lastPathSegment.orEmpty()
 
     /** A stored copy, already upright and no larger than [COPY_PX], subsampled to about [maxPx]. */
     private fun decodeBytes(jpeg: ByteArray, maxPx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
+        return BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, sampled(bounds, maxPx))
+    }
+
+    /** Decoding at the largest power-of-two reduction that keeps an image of [bounds] at least [maxPx]. */
+    private fun sampled(bounds: BitmapFactory.Options, maxPx: Int): BitmapFactory.Options {
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
-        return BitmapFactory.decodeByteArray(
-            jpeg,
-            0,
-            jpeg.size,
-            BitmapFactory.Options().apply {
-                inSampleSize = sample
-            }
-        )
+        return BitmapFactory.Options().apply { inSampleSize = sample }
     }
 
     private fun Bitmap.jpeg(quality: Int): ByteArray = ByteArrayOutputStream().use { out ->
@@ -108,16 +94,8 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
     private fun Bitmap.scaled(maxPx: Int): Bitmap {
         val longer = maxOf(width, height)
         if (longer <= maxPx) return this
-        val scale = maxPx.toFloat() / longer
-        return Bitmap.createScaledBitmap(this, (width * scale).toInt(), (height * scale).toInt(), true)
-    }
-
-    private fun displayName(uri: Uri): String? = try {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        }
-    } catch (_: SecurityException) {
-        null
+        val factor = maxPx.toFloat() / longer
+        return scale((width * factor).toInt(), (height * factor).toInt())
     }
 
     /** Decodes [uri] no larger than [maxPx] on its longer side, upright; null if it can't be read. */
@@ -149,10 +127,7 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
     private fun decodeSampled(uri: Uri, maxPx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, sampled(bounds, maxPx)) }
     }
 
     private companion object {

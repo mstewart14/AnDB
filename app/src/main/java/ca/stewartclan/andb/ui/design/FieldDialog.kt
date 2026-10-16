@@ -7,13 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -105,7 +99,13 @@ fun FieldDialog(
                     onDone = confirm,
                     modifier = Modifier.fillMaxWidth()
                 )
-                TypePicker(draft.type, onTypeChange = { draft.type = it }, modifier = Modifier.padding(top = 8.dp))
+                Picker(
+                    label = stringResource(R.string.design_type_label),
+                    selected = stringResource(draft.type.labelRes),
+                    options = designableTypes.map { it to stringResource(it.labelRes) },
+                    onSelect = { draft.type = it },
+                    modifier = Modifier.padding(top = 8.dp)
+                )
                 FieldSettings(draft, lookup, field?.id, Modifier.padding(top = 8.dp))
                 val type = draft.type
                 val new = entered ?: FieldDef(0, 0, "", type, FieldProps.default(type))
@@ -257,37 +257,6 @@ private fun RelinkOptions(
             color = if (relink) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodyMedium
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TypePicker(type: FieldType, onTypeChange: (FieldType) -> Unit, modifier: Modifier = Modifier) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
-        OutlinedTextField(
-            value = stringResource(type.labelRes),
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(stringResource(R.string.design_type_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            designableTypes.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(option.labelRes)) },
-                    onClick = {
-                        onTypeChange(option)
-                        expanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                )
-            }
-        }
     }
 }
 

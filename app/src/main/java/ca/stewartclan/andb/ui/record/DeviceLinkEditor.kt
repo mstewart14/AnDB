@@ -50,11 +50,7 @@ fun DeviceLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val cantOpen = stringResource(R.string.link_open_failed)
 
     Column(modifier) {
-        Text(
-            field.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        FieldLabel(field.name)
         if (link != null) {
             LinkName(link, available) {
                 if (!links.open(context, source, link)) Toast.makeText(context, cantOpen, Toast.LENGTH_SHORT).show()
@@ -65,13 +61,8 @@ fun DeviceLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
                 source,
                 hasLink = link != null,
                 onChoose = {
-                    if (source ==
-                        LinkSource.CONTACT
-                    ) {
-                        contactPicker.launch(null)
-                    } else {
-                        filePicker.launch(arrayOf("*/*"))
-                    }
+                    val contact = source == LinkSource.CONTACT
+                    if (contact) contactPicker.launch(null) else filePicker.launch(arrayOf("*/*"))
                 },
                 onRemove = { ctx.link(field, null) }
             )

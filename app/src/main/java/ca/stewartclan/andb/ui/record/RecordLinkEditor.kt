@@ -61,11 +61,7 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     var choosing by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier) {
-        Text(
-            field.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        FieldLabel(field.name)
         if (link != null && ref != null) {
             if (title != null) {
                 Text(
@@ -123,11 +119,7 @@ fun RecordLinksEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     var choosing by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier) {
-        Text(
-            field.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        FieldLabel(field.name)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             links.forEach { link ->
                 LinkChip(

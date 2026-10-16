@@ -5,18 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -56,7 +49,12 @@ data class IdDraft(val kind: IdKind, val start: String, val prefix: String, val 
 @Composable
 fun IdPropsEditor(draft: IdDraft, onDraftChange: (IdDraft) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier) {
-        IdKindPicker(draft.kind, onKindChange = { onDraftChange(draft.copy(kind = it)) })
+        Picker(
+            label = stringResource(R.string.id_kind_label),
+            selected = stringResource(draft.kind.labelRes),
+            options = IdKind.entries.map { it to stringResource(it.labelRes) },
+            onSelect = { onDraftChange(draft.copy(kind = it)) }
+        )
         if (draft.kind == IdKind.INCREMENT) {
             OutlinedTextField(
                 value = draft.start,
@@ -103,37 +101,6 @@ fun IdPropsEditor(draft: IdDraft, onDraftChange: (IdDraft) -> Unit, modifier: Mo
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp)
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun IdKindPicker(kind: IdKind, onKindChange: (IdKind) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = stringResource(kind.labelRes),
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(stringResource(R.string.id_kind_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            IdKind.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(option.labelRes)) },
-                    onClick = {
-                        onKindChange(option)
-                        expanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                )
-            }
         }
     }
 }

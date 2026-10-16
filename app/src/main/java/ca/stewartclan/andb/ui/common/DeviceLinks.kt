@@ -6,12 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract.Contacts
-import android.provider.OpenableColumns
 import android.util.Log
 import androidx.core.net.toUri
 import ca.stewartclan.andb.data.LinkSource
 import ca.stewartclan.andb.data.LinkValue
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,19 +41,8 @@ class DeviceLinks(private val resolver: ContentResolver) {
 
     /** The link to file [uri] from the file picker, keeping read access to it, named as the file. */
     suspend fun file(uri: Uri): LinkValue = withContext(Dispatchers.IO) {
-        try {
-            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (e: SecurityException) {
-            // Still readable until the app closes; the snapshot keeps the record showing after that.
-            Log.w(TAG, "No lasting access to $uri", e)
-        }
-        val name = try {
-            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
-        } catch (_: SecurityException) {
-            null
-        }
-        LinkValue(uri.toString(), name ?: uri.lastPathSegment.orEmpty(), null)
+        resolver.keepReadAccess(uri)
+        LinkValue(uri.toString(), resolver.displayName(uri) ?: uri.lastPathSegment.orEmpty(), null)
     }
 
     /**
@@ -63,14 +50,7 @@ class DeviceLinks(private val resolver: ContentResolver) {
      * permission to read all contacts, and the Contacts app says so itself if one is gone.
      */
     suspend fun isAvailable(source: LinkSource, uri: String): Boolean = withContext(Dispatchers.IO) {
-        source != LinkSource.FILE ||
-            try {
-                uri.toUri().takeIf { it.isContent }?.let { resolver.openInputStream(it) }?.use { true } ?: false
-            } catch (_: IOException) {
-                false
-            } catch (_: SecurityException) {
-                false
-            }
+        source != LinkSource.FILE || resolver.canRead(uri.toUri())
     }
 
     /** Opens [link] in the app for it (Contacts, or one for the file's type); false if none can. */

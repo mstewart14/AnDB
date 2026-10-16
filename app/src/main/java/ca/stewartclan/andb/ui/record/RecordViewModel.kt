@@ -322,13 +322,8 @@ class RecordViewModel(
     private fun prelinked(recordTitles: Map<Long, Map<Long, String>>): Map<Long, LinkValue> {
         val link = prelink.also { prelink = null }
         val title = link?.let { RecordRef.parse(it.uri) }?.let { recordTitles[link.fieldId]?.get(it.recordId) }
-        return if (link != null &&
-            title != null
-        ) {
-            mapOf(link.fieldId to LinkValue(link.uri, title, null))
-        } else {
-            emptyMap()
-        }
+        val start = title?.let { link.fieldId to LinkValue(link.uri, it, null) }
+        return listOfNotNull(start).toMap()
     }
 
     private suspend fun loadBacklinks(recordId: Long): List<BacklinkGroup> =

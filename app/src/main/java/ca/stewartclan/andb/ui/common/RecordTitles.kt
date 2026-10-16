@@ -1,6 +1,5 @@
 package ca.stewartclan.andb.ui.common
 
-import android.database.sqlite.SQLiteException
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.FieldDef
 import ca.stewartclan.andb.data.FieldType
@@ -11,6 +10,7 @@ import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.canBeColumn
 import ca.stewartclan.andb.data.canFilter
+import ca.stewartclan.andb.data.unlessUnreadable
 import ca.stewartclan.andb.ui.record.FieldValues
 
 /** How linked records are shown: each by the value of its database's display field. */
@@ -27,7 +27,7 @@ class RecordTitles(private val repository: DatabaseRepository, private val recor
      * What a record chooser for [link] offers: the titles, as [titles], plus the fields of its
      * database worth narrowing the choice by. Empty if that database is gone.
      */
-    suspend fun choices(link: LinkProps): LinkChoices = try {
+    suspend fun choices(link: LinkProps): LinkChoices = unlessUnreadable({ LinkChoices() }) {
         val databaseId = link.databaseId ?: return LinkChoices()
         val fields = repository.fields(databaseId)
         val shown = displayField(fields, link.displayFieldId)
@@ -36,38 +36,28 @@ class RecordTitles(private val repository: DatabaseRepository, private val recor
             titles = all.associate { it.id to title(shown, it) },
             facets = fields.filter { it.id != shown?.id && it.canFacet }.mapNotNull { facet(it, all) }
         )
-    } catch (_: SQLiteException) {
-        LinkChoices()
-    } catch (_: IllegalStateException) {
-        LinkChoices()
     }
 
     /**
      * For each field of database [databaseId] that could be its display field: what it shows for
      * every record, by record id (as [values]). Empty if the database is gone.
      */
-    suspend fun titlesByField(databaseId: String): List<Pair<FieldDef, Map<Long, String>>> = try {
-        val all = records.records(databaseId)
-        repository.fields(databaseId).filter { it.canBeColumn && it.props !is LinkProps && it.props !is LinkedProps }
-            .map { field -> field to all.associate { it.id to title(field, it) } }
-    } catch (_: SQLiteException) {
-        emptyList()
-    } catch (_: IllegalStateException) {
-        emptyList()
-    }
+    suspend fun titlesByField(databaseId: String): List<Pair<FieldDef, Map<Long, String>>> =
+        unlessUnreadable({ emptyList() }) {
+            val all = records.records(databaseId)
+            repository.fields(databaseId)
+                .filter { it.canBeColumn && it.props !is LinkProps && it.props !is LinkedProps }
+                .map { field -> field to all.associate { it.id to title(field, it) } }
+        }
 
     /**
      * What field [fieldId] (the display field when null) shows for every record of database
      * [databaseId], by record id; a record with nothing to show is "#id". Empty if the database
      * is gone.
      */
-    suspend fun values(databaseId: String, fieldId: Long?): Map<Long, String> = try {
+    suspend fun values(databaseId: String, fieldId: Long?): Map<Long, String> = unlessUnreadable({ emptyMap() }) {
         val field = displayField(repository.fields(databaseId), fieldId)
         records.records(databaseId).associate { it.id to title(field, it) }
-    } catch (_: SQLiteException) {
-        emptyMap()
-    } catch (_: IllegalStateException) {
-        emptyMap()
     }
 
     /**
