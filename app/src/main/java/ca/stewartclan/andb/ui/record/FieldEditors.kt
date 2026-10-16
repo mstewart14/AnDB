@@ -36,6 +36,8 @@ import ca.stewartclan.andb.data.RecordRef
 
 /** The record being edited, whether it may be changed, and how to report changes. */
 class EditorContext(
+    /** The database the record is in, where its copied photos are. */
+    val databaseId: String,
     val state: RecordUiState,
     val readOnly: Boolean,
     val onEdit: (FieldDef, String) -> Unit,
@@ -84,7 +86,7 @@ private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier)
         FieldType.LINK -> if (field.recordLink != null) {
             RecordLinkEditor(field, ctx, modifier)
         } else {
-            PhotoEditor(field.name, ctx.state.links[field.id], ctx.readOnly, { ctx.onLink(field, it) }, modifier)
+            PhotoEditor(field, ctx, modifier)
         }
         else -> TextEditor(field, text, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
     }

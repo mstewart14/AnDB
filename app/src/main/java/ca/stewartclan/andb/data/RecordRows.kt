@@ -20,27 +20,20 @@ internal fun SQLiteDatabase.writeValues(
     val columns = values.filterKeys { fieldId ->
         byId[fieldId]?.let { it.storage != Storage.NONE && it.type != FieldType.ID } == true
     }
-    val sets = columns.keys.joinToString("") { "${DatabaseFile.columnName(it)} = ?, " }
+    val (links, plain) = columns.entries.partition { byId[it.key]?.type == FieldType.LINK }
+    val sets = plain.joinToString("") { "${DatabaseFile.columnName(it.key)} = ?, " }
+    execSQL(
+        "UPDATE record SET ${sets}_modified = ? WHERE _id = ?",
+        (
+            plain.map {
+                it.value
+            } + modified + recordId
+            ).toTypedArray()
+    )
     // A link's uri goes in the column, its snapshot in the field's link table.
-    val bound = columns.values.map { if (it is LinkValue) it.uri else it }
-    execSQL("UPDATE record SET ${sets}_modified = ? WHERE _id = ?", (bound + modified + recordId).toTypedArray())
-    columns.filterKeys { byId[it]?.type == FieldType.LINK }.forEach { (fieldId, value) ->
-        writeLinkSnapshot(fieldId, recordId, value as? LinkValue)
-    }
+    links.forEach { (fieldId, value) -> writeLink(fieldId, recordId, value as? LinkValue) }
     choices.filterKeys { byId[it]?.isMultiList == true }.forEach { (fieldId, chosen) ->
         writeChoices(fieldId, recordId, chosen)
-    }
-}
-
-private fun SQLiteDatabase.writeLinkSnapshot(fieldId: Long, recordId: Long, link: LinkValue?) {
-    val table = DatabaseFile.linkTable(fieldId)
-    if (link == null) {
-        execSQL("DELETE FROM $table WHERE record_id = ?", arrayOf(recordId))
-    } else {
-        execSQL(
-            "INSERT OR REPLACE INTO $table (record_id, name, thumbnail) VALUES (?, ?, ?)",
-            arrayOf(recordId, link.name, link.thumbnail)
-        )
     }
 }
 

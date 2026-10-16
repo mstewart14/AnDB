@@ -103,14 +103,16 @@ enum class LinkSource {
  * Settings of a Link field. For [LinkSource.RECORD]: records of database [databaseId], shown by
  * their [displayFieldId] (the first field that can show, when null). [missingName] is that
  * database's name if it was deleted, to recognise a new database of the same name as its
- * replacement.
+ * replacement. For [LinkSource.PHOTO]: whether photos are copied into the database ([copyPhotos])
+ * rather than linked where they are.
  */
 @Serializable
 data class LinkProps(
     val source: LinkSource = LinkSource.PHOTO,
     val databaseId: String? = null,
     val displayFieldId: Long? = null,
-    val missingName: String? = null
+    val missingName: String? = null,
+    val copyPhotos: Boolean = false
 ) : FieldProps
 
 /** A link to record [recordId] of database [databaseId], stored as `andb://<database>/<record>`. */

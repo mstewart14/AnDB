@@ -95,7 +95,21 @@ class RecordRepository(private val databases: DatabaseRepository) {
         fields.filter { it.type == FieldType.LINK }.forEach {
             execSQL("DELETE FROM ${DatabaseFile.linkTable(it.id)} WHERE record_id = ?", arrayOf(recordId))
         }
+        val photos = storedPhotos(recordId)
         execSQL("DELETE FROM record WHERE _id = ?", arrayOf(recordId))
+        photos.forEach { deleteUnusedPhoto(it) }
+    }
+
+    /** The JPEG of photo [uri] stored in database [id], or null if it isn't there. */
+    suspend fun storedPhoto(id: String, uri: String): ByteArray? =
+        StoredPhoto.id(uri)?.let { photoId -> databases.read(id) { readStoredPhoto(photoId) } }
+
+    /**
+     * Sets Link field [fieldId] of each record in [links] (by record id) without counting as an
+     * edit (the modified time stays), as when a field starts copying its photos into the database.
+     */
+    suspend fun replaceLinks(id: String, fieldId: Long, links: Map<Long, LinkValue>) = databases.write(id) {
+        links.forEach { (recordId, link) -> writeLink(fieldId, recordId, link) }
     }
 
     /**

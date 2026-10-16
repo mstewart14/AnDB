@@ -81,8 +81,16 @@ item is gone: "unavailable" with a way to link again, never a blank.
 **Photos (done).** Chosen with the system photo picker (no permission); the
 app keeps lasting read access. The record view shows the thumbnail and name,
 full screen on tap; the list view shows only the thumbnail. Linked by
-reference: Android caps lasting grants per app (512 on recent versions), so
-very large photo collections would need the planned copy-into-app mode.
+reference by default: Android caps lasting grants per app (512 on recent
+versions). A Photo field can instead **copy photos into AnDB**: each is stored
+in the database (`andb_photo`, scaled to at most 2048 px, JPEG 90; read in
+pieces, as a cursor can't carry a large one), linked as `andb-photo:<id>`
+relative to its database, so copies stay when the original is deleted, count
+towards no cap, and travel with exports and record-including duplicates. A
+picked photo rides with the unsaved edit and is stored in the record's own
+transaction; a stored photo no record shows is deleted. Turning copying on
+copies the photos already linked, where still readable; turning it off keeps
+the copies, and new choices are links again.
 
 **Records (next).**
 

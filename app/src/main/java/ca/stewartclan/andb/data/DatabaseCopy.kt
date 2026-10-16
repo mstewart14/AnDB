@@ -28,6 +28,7 @@ internal fun SQLiteDatabase.pointSelfReferencesAt(from: String, to: String, with
 internal fun SQLiteDatabase.clearRecords() {
     val fields = readFields()
     execSQL("DELETE FROM record")
+    execSQL("DELETE FROM andb_photo")
     fields.filter { it.isMultiList }.forEach { execSQL("DELETE FROM ${DatabaseFile.listTable(it.id)}") }
     fields.filter { it.type == FieldType.LINK }.forEach { execSQL("DELETE FROM ${DatabaseFile.linkTable(it.id)}") }
     fields.filter { it.type == FieldType.ID }.forEach { deleteMeta(DatabaseFile.nextIdKey(it.id)) }

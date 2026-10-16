@@ -1,16 +1,19 @@
 package ca.stewartclan.andb.ui.design
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -28,16 +31,18 @@ data class LinkDraft(
     val databaseId: String? = null,
     val displayFieldId: Long? = null,
     /** Kept while [databaseId] is still the deleted database it names. */
-    val missingName: String? = null
+    val missingName: String? = null,
+    val copyPhotos: Boolean = false
 ) {
     /** The settings, or null while a record link has no database chosen. */
     fun toProps(): LinkProps? = when (source) {
-        LinkSource.PHOTO -> LinkProps(LinkSource.PHOTO)
+        LinkSource.PHOTO -> LinkProps(LinkSource.PHOTO, copyPhotos = copyPhotos)
         LinkSource.RECORD -> databaseId?.let { LinkProps(LinkSource.RECORD, it, displayFieldId, missingName) }
     }
 
     companion object {
-        fun of(props: LinkProps) = LinkDraft(props.source, props.databaseId, props.displayFieldId, props.missingName)
+        fun of(props: LinkProps) =
+            LinkDraft(props.source, props.databaseId, props.displayFieldId, props.missingName, props.copyPhotos)
 
         val Saver = Saver<LinkDraft, String>(
             save = { Json.encodeToString(serializer(), it) },
@@ -76,6 +81,19 @@ fun LinkPropsEditor(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup
             modifier = Modifier.padding(top = 8.dp)
         )
         if (draft.source == LinkSource.RECORD) RecordTarget(draft, onDraftChange, lookup)
+        if (draft.source == LinkSource.PHOTO) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.link_copy_photos), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.link_copy_photos_explained),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = draft.copyPhotos, onCheckedChange = { onDraftChange(draft.copy(copyPhotos = it)) })
+            }
+        }
     }
 }
 

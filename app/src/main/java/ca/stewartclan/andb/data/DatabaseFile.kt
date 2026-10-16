@@ -46,7 +46,9 @@ internal object DatabaseFile {
             )
         },
         // 5: record ids are never reused (AUTOINCREMENT), as records can be linked to.
-        { rebuildRecordTable(recordColumns(readFields())) }
+        { rebuildRecordTable(recordColumns(readFields())) },
+        // 6: photos copied into the database.
+        { execSQL("CREATE TABLE andb_photo (id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL)") }
     )
 
     val SCHEMA_VERSION = migrations.size + 1

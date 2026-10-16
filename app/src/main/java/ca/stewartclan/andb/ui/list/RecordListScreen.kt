@@ -114,6 +114,7 @@ fun RecordListScreen(
     BackHandler(enabled = state?.find != null) { viewModel.setFind(null) }
 
     RecordListContent(
+        databaseId = db,
         title = database?.name.orEmpty(),
         state = state,
         snackbarHostState = snackbarHostState,
@@ -151,6 +152,7 @@ fun RecordListScreen(
 
 @Composable
 fun RecordListContent(
+    databaseId: String,
     title: String,
     state: ListUiState?,
     snackbarHostState: SnackbarHostState,
@@ -197,7 +199,8 @@ fun RecordListContent(
                 sort = state.view.sort,
                 onSort = actions.views.onSort,
                 onOpen = actions.onOpen,
-                contentPadding = innerPadding
+                contentPadding = innerPadding,
+                databaseId = databaseId
             )
         }
     }

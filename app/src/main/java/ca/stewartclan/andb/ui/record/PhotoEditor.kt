@@ -38,6 +38,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.R
+import ca.stewartclan.andb.data.FieldDef
+import ca.stewartclan.andb.data.LinkProps
 import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.ui.common.PhotoAccess
 import ca.stewartclan.andb.ui.common.rememberThumbnail
@@ -46,10 +48,15 @@ import kotlinx.coroutines.launch
 /**
  * A photo link: its thumbnail and name, with buttons to choose (or choose again) and remove. The
  * thumbnail opens the photo full screen. If the photo can't be read any more, the saved snapshot
- * still shows, marked unavailable.
+ * still shows, marked unavailable. A field that copies photos copies the one chosen.
  */
 @Composable
-fun PhotoEditor(name: String, link: LinkValue?, readOnly: Boolean, onLink: (LinkValue?) -> Unit, modifier: Modifier) {
+fun PhotoEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
+    val name = field.name
+    val link = ctx.state.links[field.id]
+    val readOnly = ctx.readOnly
+    val onLink = { value: LinkValue? -> ctx.onLink(field, value) }
+    val copies = (field.props as? LinkProps)?.copyPhotos == true
     val photos = rememberPhotoAccess()
     val scope = rememberCoroutineScope()
     var linking by remember { mutableStateOf(false) }
@@ -58,12 +65,12 @@ fun PhotoEditor(name: String, link: LinkValue?, readOnly: Boolean, onLink: (Link
         if (uri != null) {
             linking = true
             scope.launch {
-                onLink(photos.link(uri))
+                onLink(if (copies) photos.copy(uri) ?: photos.link(uri) else photos.link(uri))
                 linking = false
             }
         }
     }
-    val available by produceState<Boolean?>(null, link?.uri) { value = link?.let { photos.isAvailable(it.uri) } }
+    val available by produceState<Boolean?>(null, link) { value = link?.let { photos.isAvailable(it, ctx.databaseId) } }
 
     Column(modifier) {
         Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -81,27 +88,35 @@ fun PhotoEditor(name: String, link: LinkValue?, readOnly: Boolean, onLink: (Link
                     }
                 }
                 if (!readOnly) {
-                    Row {
-                        TextButton(onClick = { picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }) {
-                            Text(
-                                stringResource(
-                                    when {
-                                        link == null -> R.string.photo_choose
-                                        available == false -> R.string.photo_choose_again
-                                        else -> R.string.photo_change
-                                    }
-                                )
-                            )
-                        }
-                        if (link != null) {
-                            TextButton(onClick = { onLink(null) }) { Text(stringResource(R.string.action_remove)) }
-                        }
-                    }
+                    PhotoButtons(link, available, onChoose = {
+                        picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                    }, onRemove = { onLink(null) })
                 }
             }
         }
     }
-    if (viewing && link != null) PhotoViewer(link, photos, onClose = { viewing = false })
+    if (viewing && link != null) PhotoViewer(link, photos, ctx.databaseId, onClose = { viewing = false })
+}
+
+/** Choose (or choose again, or change) the photo, and remove it. */
+@Composable
+private fun PhotoButtons(link: LinkValue?, available: Boolean?, onChoose: () -> Unit, onRemove: () -> Unit) {
+    Row {
+        TextButton(onClick = onChoose) {
+            Text(
+                stringResource(
+                    when {
+                        link == null -> R.string.photo_choose
+                        available == false -> R.string.photo_choose_again
+                        else -> R.string.photo_change
+                    }
+                )
+            )
+        }
+        if (link != null) {
+            TextButton(onClick = onRemove) { Text(stringResource(R.string.action_remove)) }
+        }
+    }
 }
 
 @Composable
@@ -127,12 +142,15 @@ private fun Thumbnail(link: LinkValue?, linking: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The photo full screen; the saved thumbnail stands in if the photo can't be read. Tap to close. */
+/**
+ * The photo full screen (from database [databaseId] if copied there); the saved thumbnail stands in
+ * if the photo can't be read. Tap to close.
+ */
 @Composable
-fun PhotoViewer(link: LinkValue, photos: PhotoAccess, onClose: () -> Unit) {
+fun PhotoViewer(link: LinkValue, photos: PhotoAccess, databaseId: String, onClose: () -> Unit) {
     val screenPx = LocalWindowInfo.current.containerSize.let { maxOf(it.width, it.height) }
     val thumbnail = rememberThumbnail(link.thumbnail)
-    val full by produceState<ImageBitmap?>(null, link.uri) { value = photos.load(link.uri, screenPx) }
+    val full by produceState<ImageBitmap?>(null, link) { value = photos.load(link, databaseId, screenPx) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             contentAlignment = Alignment.Center,

@@ -268,6 +268,8 @@
     <string name="record_link_none_to_choose">That database has no records yet.</string>
     <string name="record_link_facet">%1$s: %2$s</string>
     <string name="record_link_any">Any</string>
+    <string name="link_copy_photos">Copy photos into AnDB</string>
+    <string name="link_copy_photos_explained">Keeps a copy (up to 2048 px) in the database, so photos stay even if deleted from the gallery, and travel with exports. Turning this on copies the photos already linked.</string>
     <string name="link_database_deleted_named">“%1$s”, the database this field linked to, was deleted. Choose its replacement.</string>
     <string name="link_database_deleted">The database this field linked to was deleted. Choose its replacement.</string>
     <string name="list_link_broken">%1$s links to a deleted database.</string>

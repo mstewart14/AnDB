@@ -33,6 +33,7 @@ data class RelinkPreview(val fieldId: Long, val link: LinkProps, val plan: Relin
 class DesignViewModel(
     private val repository: DatabaseRepository,
     private val repair: LinkRepair,
+    private val photoCopier: PhotoCopier,
     val databaseId: String,
     /** The field whose dialog opens first, if any. */
     val openFieldId: Long? = null
@@ -83,6 +84,7 @@ class DesignViewModel(
                 new,
                 repair.repoint(databaseId, fields.value.orEmpty(), field, new, relink)
             )
+            if (startsCopying(field, new)) photoCopier.copyLinked(databaseId, new)
         }
     }
 
@@ -182,6 +184,7 @@ class DesignViewModel(
                 DesignViewModel(
                     app.repository,
                     LinkRepair(app.repository, app.recordTitles),
+                    PhotoCopier(app.records, app.photos),
                     route.databaseId,
                     route.editFieldId
                 )

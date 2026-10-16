@@ -147,7 +147,7 @@ class RecordViewModel(
 
     /** What the field editors need to show [state] and report edits; [readOnly] in protected mode. */
     fun editorContext(state: RecordUiState, readOnly: Boolean, onOpenRecord: (RecordRef) -> Unit) =
-        EditorContext(state, readOnly, ::edit, ::toggleChoice, ::setLink, onOpenRecord)
+        EditorContext(databaseId, state, readOnly, ::edit, ::toggleChoice, ::setLink, onOpenRecord)
 
     /** Links [field] to [link], or unlinks it when null. */
     fun setLink(field: FieldDef, link: LinkValue?) = _state.update {

@@ -52,6 +52,8 @@ fun RecordTable(
     onSort: (FieldDef) -> Unit,
     onOpen: (Long) -> Unit,
     contentPadding: PaddingValues,
+    /** Where photos copied into the database are, for viewing them. */
+    databaseId: String,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier.padding(top = contentPadding.calculateTopPadding())) {
@@ -79,7 +81,7 @@ fun RecordTable(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { onOpen(row.id) }
                     ) {
-                        row.cells.forEachIndexed { i, cell -> Cell(cell, widths[i]) }
+                        row.cells.forEachIndexed { i, cell -> Cell(cell, widths[i], databaseId) }
                     }
                     HorizontalDivider()
                 }
@@ -111,7 +113,7 @@ private fun HeaderCell(field: FieldDef, sort: List<SortKey>, width: Dp, onSort: 
 }
 
 @Composable
-private fun Cell(cell: ListCell, width: Dp) {
+private fun Cell(cell: ListCell, width: Dp, databaseId: String) {
     val thumbnail = rememberThumbnail(cell.photo?.thumbnail)
     var viewing by remember { mutableStateOf(false) }
     Row(
@@ -138,7 +140,7 @@ private fun Cell(cell: ListCell, width: Dp) {
         }
     }
     val photo = cell.photo
-    if (viewing && photo != null) PhotoViewer(photo, rememberPhotoAccess(), onClose = { viewing = false })
+    if (viewing && photo != null) PhotoViewer(photo, rememberPhotoAccess(), databaseId, onClose = { viewing = false })
 }
 
 val ColumnWidth.dp: Dp

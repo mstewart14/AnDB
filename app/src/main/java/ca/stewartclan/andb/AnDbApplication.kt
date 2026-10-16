@@ -30,7 +30,7 @@ class AnDbApplication : Application() {
 
     val browseOrder = BrowseOrder()
 
-    val photos: PhotoAccess by lazy { PhotoAccess(contentResolver) }
+    val photos: PhotoAccess by lazy { PhotoAccess(contentResolver, records) }
 
     val recordTitles: RecordTitles by lazy { RecordTitles(repository, records) }
 
