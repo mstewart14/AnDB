@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.chooser
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,9 @@ object ChooserRoute
 fun ChooserScreen(
     onOpenDatabase: (String) -> Unit,
     onCreatedDatabase: (String) -> Unit,
+    /** A database file opened or shared into AnDB, to offer adding. */
+    incoming: Uri? = null,
+    onIncomingHandled: () -> Unit = {},
     viewModel: ChooserViewModel = viewModel(factory = ChooserViewModel.Factory)
 ) {
     val databases by viewModel.databases.collectAsStateWithLifecycle()
@@ -81,6 +85,7 @@ fun ChooserScreen(
         transfer = rememberTransferActions(viewModel, snackbarHostState)
     )
 
+    incoming?.let { IncomingFileDialog(it, viewModel, onDone = onIncomingHandled) }
     if (newOpen) {
         NewDatabaseDialog(
             databases = databases.orEmpty(),
@@ -129,7 +134,7 @@ fun ChooserContent(
     onDuplicate: (DatabaseSummary) -> Unit,
     onDelete: (DatabaseSummary) -> Unit,
     modifier: Modifier = Modifier,
-    transfer: TransferActions = TransferActions(onExport = {}, onImport = {})
+    transfer: TransferActions = TransferActions(onExport = {}, onShare = {}, onImport = {})
 ) {
     Scaffold(
         modifier = modifier,
@@ -154,6 +159,7 @@ fun ChooserContent(
                         onRename = { onRename(db) },
                         onDuplicate = { onDuplicate(db) },
                         onExport = { transfer.onExport(db) },
+                        onShare = { transfer.onShare(db) },
                         onDelete = { onDelete(db) }
                     )
                     HorizontalDivider()
@@ -188,6 +194,7 @@ private fun DatabaseRow(
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
     onExport: () -> Unit,
+    onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -214,34 +221,21 @@ private fun DatabaseRow(
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rename)) },
-                        onClick = {
-                            menuOpen = false
-                            onRename()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_duplicate)) },
-                        onClick = {
-                            menuOpen = false
-                            onDuplicate()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.chooser_export)) },
-                        onClick = {
-                            menuOpen = false
-                            onExport()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_delete)) },
-                        onClick = {
-                            menuOpen = false
-                            onDelete()
-                        }
-                    )
+                    listOf(
+                        R.string.action_rename to onRename,
+                        R.string.action_duplicate to onDuplicate,
+                        R.string.chooser_export to onExport,
+                        R.string.chooser_share to onShare,
+                        R.string.action_delete to onDelete
+                    ).forEach { (label, action) ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(label)) },
+                            onClick = {
+                                menuOpen = false
+                                action()
+                            }
+                        )
+                    }
                 }
             }
         }

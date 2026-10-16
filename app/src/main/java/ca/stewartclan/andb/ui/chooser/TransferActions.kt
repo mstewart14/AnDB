@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.ui.chooser
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -21,12 +23,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.R
 import ca.stewartclan.andb.data.DatabaseSummary
+import ca.stewartclan.andb.ui.common.AndbFileProvider
+import ca.stewartclan.andb.ui.common.ShareFiles
 
-/** Exporting a database to an `.andb` file, and importing one. */
-class TransferActions(val onExport: (DatabaseSummary) -> Unit, val onImport: () -> Unit)
+/** Exporting a database to an `.andb` file, sharing one with another app, and importing one. */
+class TransferActions(
+    val onExport: (DatabaseSummary) -> Unit,
+    val onShare: (DatabaseSummary) -> Unit,
+    val onImport: () -> Unit
+)
 
-/** `.andb` files have no registered type, so they're saved as, and opened from, any file. */
-private const val ANDB_TYPE = "application/octet-stream"
+/** `.andb` files have no registered type, so they're saved as generic files; shared ones say what they are. */
+private const val SAVE_TYPE = "application/octet-stream"
 
 /**
  * Export (choose design only or with records, then where to save "<name>.andb") and import (choose
@@ -37,12 +45,13 @@ fun rememberTransferActions(viewModel: ChooserViewModel, snackbarHostState: Snac
     val context = LocalContext.current
     val files = remember(context) { (context.applicationContext as AnDbApplication).files }
     val databases by viewModel.databases.collectAsStateWithLifecycle()
-    // The database whose export dialog is open, then the one (and whether with records) being saved.
+    // The database whose export (or share) dialog is open, then the one (and whether with records) being saved.
     var choosingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sharing by rememberSaveable { mutableStateOf(false) }
     var savingId by rememberSaveable { mutableStateOf<String?>(null) }
     var savingRecords by rememberSaveable { mutableStateOf(false) }
 
-    val saveTo = rememberLauncherForActivityResult(CreateDocument(ANDB_TYPE)) { uri ->
+    val saveTo = rememberLauncherForActivityResult(CreateDocument(SAVE_TYPE)) { uri ->
         val db = databases?.find { it.id == savingId }
         if (uri != null && db != null) viewModel.export(db, savingRecords) { files.writeBytes(uri, it) }
         savingId = null
@@ -51,19 +60,37 @@ fun rememberTransferActions(viewModel: ChooserViewModel, snackbarHostState: Snac
         if (uri != null) viewModel.import { files.readBytes(uri) }
     }
     databases?.find { it.id == choosingId }?.let { db ->
+        val shareTitle = stringResource(R.string.chooser_share_with)
         ExportDialog(
             name = db.name,
+            sharing = sharing,
             onConfirm = { withRecords ->
                 choosingId = null
-                savingId = db.id
-                savingRecords = withRecords
-                saveTo.launch("${db.name}.andb")
+                if (sharing) {
+                    viewModel.share(db, withRecords) {
+                        ShareFiles.share(context, "${db.name}.andb", AndbFileProvider.ANDB_TYPE, it, shareTitle)
+                    }
+                } else {
+                    savingId = db.id
+                    savingRecords = withRecords
+                    saveTo.launch("${db.name}.andb")
+                }
             },
             onDismiss = { choosingId = null }
         )
     }
     TransferNotices(viewModel, snackbarHostState)
-    return TransferActions(onExport = { choosingId = it.id }, onImport = { openFrom.launch(arrayOf("*/*")) })
+    return TransferActions(
+        onExport = {
+            sharing = false
+            choosingId = it.id
+        },
+        onShare = {
+            sharing = true
+            choosingId = it.id
+        },
+        onImport = { openFrom.launch(arrayOf("*/*")) }
+    )
 }
 
 @Composable
@@ -82,16 +109,25 @@ private fun TransferNotices(viewModel: ChooserViewModel, snackbarHostState: Snac
     }
 }
 
-/** Chooses whether exporting database [name] includes its records; [onConfirm] gets the choice. */
+/** Chooses whether exporting (or [sharing]) database [name] includes its records; [onConfirm] gets the choice. */
 @Composable
-private fun ExportDialog(name: String, onConfirm: (withRecords: Boolean) -> Unit, onDismiss: () -> Unit) {
+private fun ExportDialog(
+    name: String,
+    sharing: Boolean,
+    onConfirm: (withRecords: Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
     var withRecords by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chooser_export_title, name)) },
+        title = {
+            Text(stringResource(if (sharing) R.string.chooser_share_title else R.string.chooser_export_title, name))
+        },
         text = {
             Column {
-                Text(stringResource(R.string.chooser_export_explained))
+                Text(
+                    stringResource(if (sharing) R.string.chooser_share_explained else R.string.chooser_export_explained)
+                )
                 CopyChoice(
                     stringResource(R.string.chooser_duplicate_design_only),
                     stringResource(R.string.chooser_duplicate_design_only_explained),
@@ -107,8 +143,38 @@ private fun ExportDialog(name: String, onConfirm: (withRecords: Boolean) -> Unit
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(withRecords) }) { Text(stringResource(R.string.action_export)) }
+            TextButton(onClick = { onConfirm(withRecords) }) {
+                Text(stringResource(if (sharing) R.string.action_share else R.string.action_export))
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+    )
+}
+
+/**
+ * Offers to add the database in file [uri], opened or shared into AnDB from another app. Adding
+ * imports it (or says it isn't a database); either way [onDone] is called.
+ */
+@Composable
+fun IncomingFileDialog(uri: Uri, viewModel: ChooserViewModel, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val files = remember(context) { (context.applicationContext as AnDbApplication).files }
+    val name by produceState<String?>(null, uri) { value = files.displayName(uri) }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(stringResource(R.string.chooser_incoming_title)) },
+        text = {
+            Text(
+                name?.let { stringResource(R.string.chooser_incoming_named, it) }
+                    ?: stringResource(R.string.chooser_incoming)
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                viewModel.import { files.readBytes(uri) }
+                onDone()
+            }) { Text(stringResource(R.string.action_add)) }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text(stringResource(R.string.action_cancel)) } }
     )
 }

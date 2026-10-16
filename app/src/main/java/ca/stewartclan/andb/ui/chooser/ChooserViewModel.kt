@@ -81,6 +81,14 @@ class ChooserViewModel(private val repository: DatabaseRepository, private val t
         }
     }
 
+    /**
+     * Hands [database] as an `.andb` file's bytes to [send], to share: its design, and its records
+     * if [withRecords].
+     */
+    fun share(database: DatabaseSummary, withRecords: Boolean, send: suspend (ByteArray) -> Unit) {
+        launchReporting { send(transfer.export(database.id, withRecords)) }
+    }
+
     /** Adds the database in the `.andb` file [read] returns. */
     fun import(read: suspend () -> ByteArray) {
         launchReporting {

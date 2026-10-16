@@ -44,6 +44,14 @@
     <string name="chooser_export_explained">Saves an .andb file to keep, share, or import on another device.</string>
     <string name="chooser_exported">Exported \u201c%1$s\u201d</string>
     <string name="chooser_import">Import database\u2026</string>
+    <string name="chooser_share">Share\u2026</string>
+    <string name="action_share">Share</string>
+    <string name="chooser_share_title">Share \u201c%1$s\u201d</string>
+    <string name="chooser_share_explained">Sends an .andb file with the app you choose. Whoever gets it can add it with Import database\u2026 in AnDB.</string>
+    <string name="chooser_share_with">Share database with</string>
+    <string name="chooser_incoming_title">Add a database?</string>
+    <string name="chooser_incoming_named">Add the database in \u201c%1$s\u201d to AnDB?</string>
+    <string name="chooser_incoming">Add the database in this file to AnDB?</string>
     <string name="chooser_imported">Imported \u201c%1$s\u201d</string>
     <string name="chooser_name_duplicate">A database with this name already exists</string>
     <string name="chooser_delete_title">Delete “%1$s”?</string>

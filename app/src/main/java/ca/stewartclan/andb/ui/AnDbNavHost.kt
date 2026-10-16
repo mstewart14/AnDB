@@ -1,6 +1,8 @@
 package ca.stewartclan.andb.ui
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -20,13 +22,20 @@ import ca.stewartclan.andb.ui.record.NEW_RECORD_ID
 import ca.stewartclan.andb.ui.record.RecordRoute
 import ca.stewartclan.andb.ui.record.RecordScreen
 
+/**
+ * AnDB's screens. A database file [incoming] from another app takes the user to the database list,
+ * which offers to add it, then calls [onIncomingHandled].
+ */
 @Composable
-fun AnDbNavHost() {
+fun AnDbNavHost(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
     val navController = rememberNavController()
     val back: () -> Unit = { navController.popBackStack() }
+    LaunchedEffect(incoming) { if (incoming != null) navController.popBackStack(ChooserRoute, inclusive = false) }
     NavHost(navController = navController, startDestination = ChooserRoute) {
         composable<ChooserRoute> {
             ChooserScreen(
+                incoming = incoming,
+                onIncomingHandled = onIncomingHandled,
                 onOpenDatabase = { navController.navigate(RecordListRoute(it)) },
                 // Like Pilot-DB, a new database opens in its design; back then leads to its records.
                 onCreatedDatabase = {
