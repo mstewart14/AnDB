@@ -3,8 +3,10 @@
 ## Origin
 
 AnDB recreates the *behaviour* of Pilot-DB (GPL PalmOS flat-file database,
-last release 1.1.3, 2005). There is no compatibility with Pilot-DB's `.pdb`
-format and no code is derived from it.
+last release 1.1.3, 2005). The app doesn't read Pilot-DB's `.pdb` format and no
+code is derived from Pilot-DB. `tools/pdb2andb.py` converts Pilot-DB 1.x
+databases to `.andb` files to import; `samples/pilot-db/` holds the Pilot-DB
+databank's databases converted with it.
 
 ## Screens
 

@@ -1,7 +1,8 @@
 # Pilot-DB databank samples
 
 These are the 42 databases of the [Pilot-DB databank](https://pilot-db.sourceforge.net/databank.htm),
-converted from Pilot-DB's PalmOS `.pdb` format to AnDB `.andb` files and grouped as the databank grouped
+converted from Pilot-DB's PalmOS `.pdb` format to AnDB `.andb` files with
+[`tools/pdb2andb.py`](../../tools/pdb2andb.py) and grouped as the databank grouped
 them: English, German and French. Add one with **Import database…** in AnDB, or open it from a file
 manager or email.
 
