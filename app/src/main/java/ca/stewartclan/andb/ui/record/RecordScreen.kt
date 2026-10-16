@@ -291,7 +291,11 @@ private fun RecordForm(
     ) {
         if (state.showMissing && state.missing.isNotEmpty()) {
             Text(
-                stringResource(R.string.record_fill_required),
+                if (state.isNew) {
+                    stringResource(R.string.record_fill_required)
+                } else {
+                    stringResource(R.string.record_missing_required, state.missing.joinToString(", ") { it.name })
+                },
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium
             )

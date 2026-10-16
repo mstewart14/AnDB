@@ -45,7 +45,9 @@ Default values per field are still planned.
   A new record exists only on screen until saved complete. Leaving with
   required fields empty asks: keep editing, or discard changes. A new record
   with nothing entered is dropped without asking.
-- Records from before a field became required stay as they are until edited.
+- Records from before a field became required stay as they are until edited,
+  but say so when shown ("This record is missing required fields: …", the
+  fields marked) without stopping you browsing on. Editing one enforces the rule.
 
 ### ID fields
 

@@ -187,9 +187,8 @@ class RecordViewModel(
             drafts = drafts(state.record),
             chosen = state.record.choices,
             links = links(state.fields, state.record),
-            dirty = false,
-            showMissing = false
-        )
+            dirty = false
+        )?.withStoredWarning()
     }
 
     fun duplicate() = launchReporting {
@@ -293,7 +292,7 @@ class RecordViewModel(
             linkFacets = linkFacets,
             linkedValues = linkedValues,
             backlinks = if (record.id == NEW_RECORD_ID) emptyList() else loadBacklinks(record.id)
-        )
+        ).withStoredWarning()
         savedState[KEY_RECORD] = recordId
     }
 
@@ -377,3 +376,9 @@ private fun drafts(record: Record): Map<Long, String> =
 
 private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> =
     fields.filter { it.type == FieldType.LINK }.associate { it.id to record.values[it.id] as? LinkValue }
+
+/**
+ * A stored record missing a field made required since it was entered says so at once; a new one
+ * only once there's been an attempt to move on.
+ */
+private fun RecordUiState.withStoredWarning() = copy(showMissing = !isNew && missing.isNotEmpty())
