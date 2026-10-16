@@ -3,7 +3,10 @@ package ca.stewartclan.andb.ui.common
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
+import ca.stewartclan.andb.data.copyAtMost
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -11,7 +14,14 @@ import kotlinx.coroutines.withContext
 class FileAccess(private val resolver: ContentResolver) {
     suspend fun writeText(uri: Uri, text: String) = writeBytes(uri, text.toByteArray(Charsets.UTF_8))
 
-    suspend fun readText(uri: Uri): String = readBytes(uri).toString(Charsets.UTF_8)
+    /** The text of file [uri], read as UTF-8; refused if it's larger than [MAX_TEXT_BYTES]. */
+    suspend fun readText(uri: Uri): String = withContext(Dispatchers.IO) {
+        val bytes = ByteArrayOutputStream()
+        open(uri).use { input ->
+            input.copyAtMost(bytes, MAX_TEXT_BYTES) { IOException("That file is too large (over 32 MB)") }
+        }
+        bytes.toString(Charsets.UTF_8.name())
+    }
 
     suspend fun writeBytes(uri: Uri, bytes: ByteArray) = withContext(Dispatchers.IO) {
         // "wt": replace the file's contents rather than writing over the start of them.
@@ -29,8 +39,13 @@ class FileAccess(private val resolver: ContentResolver) {
         }
     }
 
-    suspend fun readBytes(uri: Uri): ByteArray = withContext(Dispatchers.IO) {
-        val stream = resolver.openInputStream(uri) ?: throw IOException("Can't read $uri")
-        stream.use { it.readBytes() }
+    /** Opens file [uri] for reading; the caller closes it. */
+    suspend fun open(uri: Uri): InputStream = withContext(Dispatchers.IO) {
+        resolver.openInputStream(uri) ?: throw IOException("Can't read $uri")
+    }
+
+    private companion object {
+        /** Largest text file read (a CSV file to import), well past any real one. */
+        const val MAX_TEXT_BYTES = 32L * 1024 * 1024
     }
 }

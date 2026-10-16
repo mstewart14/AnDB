@@ -65,7 +65,7 @@ class DeviceLinks(private val resolver: ContentResolver) {
     suspend fun isAvailable(source: LinkSource, uri: String): Boolean = withContext(Dispatchers.IO) {
         source != LinkSource.FILE ||
             try {
-                resolver.openInputStream(uri.toUri())?.use { true } ?: false
+                uri.toUri().takeIf { it.isContent }?.let { resolver.openInputStream(it) }?.use { true } ?: false
             } catch (_: IOException) {
                 false
             } catch (_: SecurityException) {
@@ -76,6 +76,7 @@ class DeviceLinks(private val resolver: ContentResolver) {
     /** Opens [link] in the app for it (Contacts, or one for the file's type); false if none can. */
     fun open(context: Context, source: LinkSource, link: LinkValue): Boolean {
         val uri = link.uri.toUri()
+        if (!uri.isContent) return false
         val intent = Intent(Intent.ACTION_VIEW).apply {
             if (source == LinkSource.FILE) {
                 setDataAndType(uri, resolver.getType(uri))

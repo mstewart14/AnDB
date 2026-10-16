@@ -1,5 +1,6 @@
 package ca.stewartclan.andb.data
 
+import android.database.sqlite.SQLiteDatabase
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -90,6 +91,53 @@ class DatabaseTransferTest {
         // The original is untouched.
         assertEquals(wines, field(wines, "After").recordLink?.databaseId)
         assertEquals(null, field(wines, "Smells of").recordLink?.missingName)
+    }
+
+    /** An export of a small database, changed by [tamper] as someone might before sending it. */
+    private suspend fun tampered(tamper: SQLiteDatabase.() -> Unit): ByteArray {
+        val id = repository.create("Wines")
+        val name = repository.addField(id, "Name", FieldType.STRING)
+        records.insert(id, mapOf(name.id to "Mump"), emptyMap())
+        val file = File(dir, "tampered.bin")
+        file.writeBytes(transfer.export(id, withRecords = true))
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.tamper() }
+        return file.readBytes().also { file.delete() }
+    }
+
+    private suspend fun assertRefused(bytes: ByteArray) {
+        val before = repository.readSummaries().map { it.name }
+        try {
+            transfer.import(bytes)
+            fail("Imported a tampered file")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message.orEmpty().startsWith("That file isn't an AnDB database"))
+        }
+        assertEquals(before, repository.readSummaries().map { it.name })
+        assertTrue(dir.listFiles { f -> f.extension == "tmp" }!!.isEmpty())
+    }
+
+    @Test
+    fun aFileWithTriggersOrViewsIsRefused() = runBlocking {
+        assertRefused(tampered { execSQL("CREATE TRIGGER wipe AFTER UPDATE ON record BEGIN DELETE FROM record; END") })
+        assertRefused(tampered { execSQL("CREATE VIEW everything AS SELECT * FROM record") })
+    }
+
+    @Test
+    fun aFileWithoutASchemaVersionIsRefused() = runBlocking {
+        assertRefused(tampered { version = 0 })
+    }
+
+    @Test
+    fun aFileWithFieldsAnDbDoesNotKnowIsRefused() = runBlocking {
+        assertRefused(tampered { execSQL("UPDATE andb_field SET type = 'hologram'") })
+        assertRefused(tampered { execSQL("UPDATE andb_field SET type = 'list', props = '{not json'") })
+    }
+
+    @Test
+    fun anUntamperedExportStillImports() = runBlocking {
+        val bytes = tampered { }
+        val id = transfer.import(bytes)
+        assertEquals("Mump", records.records(id).single().values.values.single())
     }
 
     @Test

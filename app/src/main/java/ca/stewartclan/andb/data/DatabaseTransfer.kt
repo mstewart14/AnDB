@@ -4,7 +4,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteException
 import androidx.core.database.sqlite.transaction
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Databases as files to keep or share: an `.andb` file is the database's own SQLite file, with or
@@ -29,30 +32,83 @@ class DatabaseTransfer(private val repository: DatabaseRepository) {
         }
     }
 
+    /** Adds the database in `.andb` file [bytes], as [import] from a stream. */
+    suspend fun import(bytes: ByteArray): String = import(bytes.inputStream())
+
     /**
-     * Adds the database in `.andb` file [bytes] and returns its id. It keeps its name, numbered if
-     * taken ("Wines (2)"); links and lookups to itself point at the new database.
+     * Adds the database in `.andb` file [source] (closed once read) and returns its id. It keeps its
+     * name, numbered if taken ("Wines (2)"); links and lookups to itself point at the new database.
+     * Files come from other people, so one is refused, adding nothing, unless it's a sound AnDB
+     * database no newer than this AnDB, no larger than [MAX_IMPORT_BYTES], holding only what AnDB
+     * puts there (no triggers, which would run with later edits) and field settings it can read.
      */
-    suspend fun import(bytes: ByteArray): String = repository.mutate {
-        val taken = repository.readSummaries().map { it.name }
-        withTempFile { temp ->
-            temp.writeBytes(bytes)
-            val id = UUID.randomUUID().toString()
-            try {
-                DatabaseFile.open(temp).use { db -> db.transaction { adopt(id, taken) } }
-            } catch (e: SQLiteException) {
-                throw IllegalStateException(NOT_ANDB, e)
-            } catch (e: IllegalStateException) {
-                // Not ours, or made by a newer AnDB; the message would name the scratch file.
-                throw IllegalStateException(NOT_ANDB, e)
+    suspend fun import(source: InputStream): String {
+        val temp = withContext(Dispatchers.IO) {
+            repository.dir.mkdirs()
+            File.createTempFile("transfer", ".tmp", repository.dir)
+        }
+        try {
+            // Copied outside the write lock: a slow source mustn't hold up other changes.
+            withContext(Dispatchers.IO) {
+                source.use { input ->
+                    temp.outputStream().use {
+                        input.copyAtMost(it, MAX_IMPORT_BYTES) { IllegalStateException(TOO_LARGE) }
+                    }
+                }
             }
-            check(temp.renameTo(repository.fileFor(id))) { "Couldn't add the database" }
-            id
+            return repository.mutate { add(temp) }
+        } finally {
+            temp.delete()
+            File(temp.path + "-journal").delete()
+        }
+    }
+
+    /** Adds imported file [temp] as a new database (see [import]) and returns its id. */
+    private fun add(temp: File): String {
+        val taken = repository.readSummaries().map { it.name }
+        val id = UUID.randomUUID().toString()
+        // Whatever is wrong with the file, the message would only name the scratch file.
+        val failure = try {
+            checkImportable(temp)
+            DatabaseFile.open(temp).use { db -> db.transaction { adopt(id, taken) } }
+            null
+        } catch (e: SQLiteException) {
+            e
+        } catch (e: IllegalStateException) {
+            // Not ours, or made by a newer AnDB.
+            e
+        } catch (e: IllegalArgumentException) {
+            // Field settings that can't be read.
+            e
+        }
+        if (failure != null) throw IllegalStateException(NOT_ANDB, failure)
+        check(temp.renameTo(repository.fileFor(id))) { "Couldn't add the database" }
+        return id
+    }
+
+    /**
+     * Refuses [file] unless it's a sound SQLite file holding only the tables and indexes AnDB makes:
+     * a trigger or view could change the database whenever it's used.
+     */
+    private fun checkImportable(file: File) {
+        val flags = SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS
+        SQLiteDatabase.openDatabase(file.path, null, flags).use { db ->
+            val sound = db.rawQuery("PRAGMA quick_check", null).use { it.moveToFirst() && it.getString(0) == "ok" }
+            check(sound) { "Damaged database" }
+            db.rawQuery("SELECT type, name FROM sqlite_master", null).use { c ->
+                while (c.moveToNext()) {
+                    val type = c.getString(0)
+                    val name = c.getString(1)
+                    check(EXPECTED[type]?.matches(name) == true) { "Unexpected $type $name" }
+                }
+            }
         }
     }
 
     /** Makes this imported database database [id], under a name not among [taken]. */
     private fun SQLiteDatabase.adopt(id: String, taken: List<String>) {
+        // Field settings it can't read refuse the file now, rather than each time it's opened.
+        readFields()
         val base = getMeta(DatabaseFile.META_NAME)?.trim()?.takeIf { it.isNotEmpty() } ?: IMPORTED
         val name = (sequenceOf(base) + generateSequence(2) { it + 1 }.map { "$base ($it)" })
             .first { candidate -> taken.none { it.equals(candidate, ignoreCase = true) } }
@@ -94,5 +150,18 @@ class DatabaseTransfer(private val repository: DatabaseRepository) {
         const val IMPORTED = "Imported"
 
         const val NOT_ANDB = "That file isn't an AnDB database, or it's from a newer version of AnDB"
+
+        /** Largest `.andb` file imported: far beyond any real database, short of filling the phone. */
+        const val MAX_IMPORT_BYTES = 512L * 1024 * 1024
+
+        const val TOO_LARGE = "That file is too large to be an AnDB database"
+
+        /** What an AnDB database's schema holds, by type: its own tables, and indexes on them. */
+        val EXPECTED = mapOf(
+            "table" to Regex(
+                "andb_(meta|field|view|filter|photo)|record|(list|link|links)_f\\d+|sqlite_sequence|android_metadata"
+            ),
+            "index" to Regex("u_f\\d+|sqlite_autoindex_\\w+")
+        )
     }
 }

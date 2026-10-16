@@ -102,6 +102,22 @@ class CsvValuesTest {
     }
 
     @Test
+    fun textThatLooksLikeAFormulaIsExportedAsTextAndImportedBack() {
+        val record = Record(1, "2026-10-15T08:00:00Z", "2026-10-15T08:00:00Z", mapOf(2L to -5L), emptyMap())
+        val title = FieldDef(1, 0, "Title", FieldType.STRING)
+        val formula = "=HYPERLINK(\"http://x\")"
+        assertEquals("'$formula", CsvValues.export(title, record, formula))
+        assertEquals("'-- draft", CsvValues.export(title, record, "-- draft"))
+        assertEquals("'it's", CsvValues.export(title, record, "'it's").removePrefix("'").let { "'$it" })
+        // Numbers keep their sign.
+        assertEquals("-5", CsvValues.export(FieldDef(2, 0, "N", FieldType.INTEGER), record, "-5"))
+
+        assertEquals(CellValue.Value(formula), CsvValues.import(title, "'$formula"))
+        assertEquals(CellValue.Value("'it's"), CsvValues.import(title, "'it's"))
+        assertEquals(CellValue.Value(-5L), import(FieldType.INTEGER, "'-5"))
+    }
+
+    @Test
     fun whatCanBeImported() {
         assertTrue(field(FieldType.STRING).canImport)
         assertTrue(field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a")).canImport)

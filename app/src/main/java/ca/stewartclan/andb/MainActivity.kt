@@ -1,5 +1,6 @@
 package ca.stewartclan.andb
 
+import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -40,7 +41,10 @@ class MainActivity : ComponentActivity() {
         incoming?.let { outState.putString(KEY_INCOMING, it.toString()) }
     }
 
-    /** The file [intent] opens (View) or shares (Send) with AnDB, if any. */
+    /**
+     * The file [intent] opens (View) or shares (Send) with AnDB, if any. Only content uris, which
+     * the sending app grants: another app can name any uri, and AnDB could read some it shouldn't.
+     */
     private fun fileIn(intent: Intent?): Uri? = when (intent?.action) {
         Intent.ACTION_VIEW -> intent.data
         Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -50,7 +54,7 @@ class MainActivity : ComponentActivity() {
             intent.getParcelableExtra(Intent.EXTRA_STREAM)
         }
         else -> null
-    }
+    }?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT }
 
     private companion object {
         const val KEY_INCOMING = "incoming"

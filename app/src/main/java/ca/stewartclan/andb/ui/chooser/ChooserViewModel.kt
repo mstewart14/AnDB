@@ -11,6 +11,7 @@ import ca.stewartclan.andb.data.create
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
 import ca.stewartclan.andb.ui.common.ReportingViewModel
+import java.io.InputStream
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -89,10 +90,10 @@ class ChooserViewModel(private val repository: DatabaseRepository, private val t
         launchReporting { send(transfer.export(database.id, withRecords)) }
     }
 
-    /** Adds the database in the `.andb` file [read] returns. */
-    fun import(read: suspend () -> ByteArray) {
+    /** Adds the database in the `.andb` file [open] opens. */
+    fun import(open: suspend () -> InputStream) {
         launchReporting {
-            val id = transfer.import(read())
+            val id = transfer.import(open())
             _notice.value = TransferNotice.Imported(databases.value.orEmpty().find { it.id == id }?.name.orEmpty())
         }
     }

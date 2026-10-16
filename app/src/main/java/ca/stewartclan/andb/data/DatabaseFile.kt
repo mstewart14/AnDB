@@ -85,6 +85,7 @@ internal object DatabaseFile {
     fun open(file: File): SQLiteDatabase {
         val db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
         check(db.applicationId() == APPLICATION_ID) { "Not an AnDB database: ${file.name}" }
+        check(db.version >= 1) { "${file.name} has no AnDB schema version" }
         check(db.version <= SCHEMA_VERSION) { "${file.name} was made by a newer AnDB (schema ${db.version})" }
         migrate(db)
         return db

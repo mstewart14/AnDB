@@ -177,11 +177,15 @@ private fun filterFor(type: FieldType, text: String): String = when (type) {
 private fun actionFor(type: FieldType, value: String): Pair<ImageVector, Intent>? = when (type) {
     FieldType.EMAIL -> Icons.Filled.Email to Intent(Intent.ACTION_SENDTO, "mailto:$value".toUri())
     FieldType.PHONE -> Icons.Filled.Call to Intent(Intent.ACTION_DIAL, "tel:$value".toUri())
-    FieldType.URL ->
-        Icons.AutoMirrored.Filled.Send to
-            Intent(Intent.ACTION_VIEW, (if ("://" in value) value else "https://$value").toUri())
+    // https if no scheme is named; only http and https, as a value from someone else's database
+    // could name a file or another app's address.
+    FieldType.URL -> (if ("://" in value) value else "https://$value").toUri()
+        .takeIf { it.scheme?.lowercase() in WEB_SCHEMES }
+        ?.let { Icons.AutoMirrored.Filled.Send to Intent(Intent.ACTION_VIEW, it) }
     else -> null
 }
+
+private val WEB_SCHEMES = setOf("http", "https")
 
 private fun Context.startSafely(intent: Intent) {
     try {

@@ -30,7 +30,8 @@ val FieldDef.canImport: Boolean
 /**
  * Conversions between records and CSV cells. Export writes what the list shows, except in plain
  * forms where spreadsheets or a later import need them: ISO dates and times, yes/no, numbers
- * (not stars), and multiple choices or several linked titles joined by "; ".
+ * (not stars), and multiple choices or several linked titles joined by "; ". Text a spreadsheet
+ * would take for a formula ("=…", "+…", "-…", "@…") gets a leading "'", which import removes.
  */
 object CsvValues {
     const val CHOICE_SEPARATOR = "; "
@@ -50,16 +51,27 @@ object CsvValues {
             field.type == FieldType.CREATED -> record.created
             field.type == FieldType.MODIFIED -> record.modified
             field.type in setOf(FieldType.DATE, FieldType.TIME, FieldType.RATING) -> FieldValues.toDraft(value)
-            else -> shown
-        }
+            field.storage == Storage.INTEGER || field.storage == Storage.REAL -> shown
+            else -> shown.asText()
+        }.let { if (field.isMultiList) it.asText() else it }
     }
+
+    /** This text as a cell a spreadsheet won't run: one that would start a formula starts with "'". */
+    private fun String.asText(): String = if (firstOrNull() in FORMULA_STARTS) "'$this" else this
+
+    /** A cell as exported, without the "'" export put before text that looks like a formula. */
+    private fun String.fromText(): String =
+        if (startsWith("'") && getOrNull(1) in FORMULA_STARTS) substring(1) else this
+
+    /** What a spreadsheet takes to start a formula (or, for tab and return, to hide one). */
+    private val FORMULA_STARTS = setOf('=', '+', '-', '@', '\t', '\r')
 
     /**
      * What [text] means for [field]. A record link needs [titles] of the records it can link to
      * (by record id): it links only to the one record with that title, ignoring case.
      */
     fun import(field: FieldDef, text: String, titles: Map<Long, String> = emptyMap()): CellValue {
-        val cell = text.trim()
+        val cell = text.trim().fromText()
         return when {
             field.isMultiList -> CellValue.Choices(
                 cell.split(';').map {

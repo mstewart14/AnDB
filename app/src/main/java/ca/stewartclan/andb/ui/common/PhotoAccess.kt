@@ -62,7 +62,7 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
             link.photo != null -> true
             StoredPhoto.isStored(link.uri) -> records.storedPhoto(databaseId, link.uri) != null
             else -> try {
-                resolver.openInputStream(link.uri.toUri())?.use { true } ?: false
+                link.uri.toUri().takeIf { it.isContent }?.let { resolver.openInputStream(it) }?.use { true } ?: false
             } catch (_: IOException) {
                 false
             } catch (_: SecurityException) {
@@ -122,7 +122,9 @@ class PhotoAccess(private val resolver: ContentResolver, private val records: Re
 
     /** Decodes [uri] no larger than [maxPx] on its longer side, upright; null if it can't be read. */
     private fun decode(uri: Uri, maxPx: Int): Bitmap? = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (!uri.isContent) {
+            null
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             // ImageDecoder applies the photo's EXIF rotation.
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
                 val longer = maxOf(info.size.width, info.size.height)

@@ -57,7 +57,7 @@ fun rememberTransferActions(viewModel: ChooserViewModel, snackbarHostState: Snac
         savingId = null
     }
     val openFrom = rememberLauncherForActivityResult(OpenDocument()) { uri ->
-        if (uri != null) viewModel.import { files.readBytes(uri) }
+        if (uri != null) viewModel.import { files.open(uri) }
     }
     databases?.find { it.id == choosingId }?.let { db ->
         val shareTitle = stringResource(R.string.chooser_share_with)
@@ -171,7 +171,7 @@ fun IncomingFileDialog(uri: Uri, viewModel: ChooserViewModel, onDone: () -> Unit
         },
         confirmButton = {
             TextButton(onClick = {
-                viewModel.import { files.readBytes(uri) }
+                viewModel.import { files.open(uri) }
                 onDone()
             }) { Text(stringResource(R.string.action_add)) }
         },
