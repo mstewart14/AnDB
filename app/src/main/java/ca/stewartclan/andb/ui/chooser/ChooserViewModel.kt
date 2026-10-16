@@ -7,6 +7,7 @@ import ca.stewartclan.andb.AnDbApplication
 import ca.stewartclan.andb.data.DatabaseRepository
 import ca.stewartclan.andb.data.DatabaseSummary
 import ca.stewartclan.andb.data.DatabaseTransfer
+import ca.stewartclan.andb.data.create
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.NameValidator
 import ca.stewartclan.andb.ui.common.ReportingViewModel
@@ -33,9 +34,20 @@ class ChooserViewModel(private val repository: DatabaseRepository, private val t
     fun checkName(name: String, renaming: DatabaseSummary? = null): NameProblem =
         NameValidator.check(name, databases.value.orEmpty().map { it.name }, renaming?.name)
 
-    /** Creates a database, then calls [onCreated] with its id so the caller can open its design. */
-    fun create(name: String, onCreated: (String) -> Unit) {
-        launchReporting { onCreated(repository.create(name.trim())) }
+    /**
+     * Creates a database, blank or from [start], then calls [onCreated] with its id so the caller
+     * can open its design.
+     */
+    fun create(name: String, start: StartFrom, onCreated: (String) -> Unit) {
+        launchReporting {
+            val trimmed = name.trim()
+            val id = when (start) {
+                StartFrom.Blank -> repository.create(trimmed)
+                is StartFrom.FromTemplate -> repository.create(trimmed, start.template)
+                is StartFrom.DesignOf -> repository.duplicate(start.databaseId, trimmed, withRecords = false)
+            }
+            onCreated(id)
+        }
     }
 
     fun rename(database: DatabaseSummary, name: String) {

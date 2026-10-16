@@ -24,6 +24,12 @@
     <string name="chooser_empty_body">Tap + to design your first database.</string>
     <string name="chooser_new_database">New database</string>
     <string name="chooser_rename_database">Rename database</string>
+    <string name="chooser_start_from">Start from</string>
+    <string name="chooser_start_blank">Blank</string>
+    <string name="chooser_start_template">Template: %1$s</string>
+    <string name="chooser_start_design">Design of \u201c%1$s\u201d</string>
+    <string name="chooser_start_fields">Fields: %1$s. You can change them afterwards.</string>
+    <string name="chooser_start_design_explained">Its fields, list views and filters, without its records.</string>
     <string name="action_duplicate">Duplicate\u2026</string>
     <string name="chooser_duplicate_database">Duplicate database</string>
     <string name="chooser_copy_name">%1$s copy</string>

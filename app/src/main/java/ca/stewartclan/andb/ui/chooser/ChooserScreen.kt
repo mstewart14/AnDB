@@ -82,13 +82,11 @@ fun ChooserScreen(
     )
 
     if (newOpen) {
-        NameDialog(
-            title = stringResource(R.string.chooser_new_database),
-            confirmLabel = stringResource(R.string.action_create),
-            initialName = "",
+        NewDatabaseDialog(
+            databases = databases.orEmpty(),
             check = viewModel::checkName,
-            onConfirm = {
-                viewModel.create(it, onCreated = onCreatedDatabase)
+            onConfirm = { name, start ->
+                viewModel.create(name, start, onCreated = onCreatedDatabase)
                 newOpen = false
             },
             onDismiss = { newOpen = false }
