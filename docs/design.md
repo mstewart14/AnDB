@@ -17,7 +17,7 @@ databank's databases converted with it.
 | List view | Records as a table with a header row; tap a header to sort (again to reverse). Named list views: columns (show all fields, or chosen ones in order, narrow/medium/wide) and sort levels (field, ascending/descending, case-sensitive). Find: case-sensitive, whole word, one field or all, on the text as shown. Saved named filters. Previous/next in the record view follows the list's order, filter and find. | Done |
 | Record view | One record, all fields, an input per type. Previous/next (buttons or swipe); at the last record next becomes + (a new record, as does swiping on), protected mode (lock), + for a new record, duplicate, delete. Edits save on leaving the record. | Done |
 | Design view | One row per field: name, type, settings. Add, edit, delete; reorder by drag and drop or menu. Warns before changes that lose or convert values. | Done |
-| CSV | From the list menu. Export: the records the list shows (filter and Find), every field, as RFC 4180 UTF-8 with a byte-order mark; dates/times ISO, checkboxes yes/no, ratings as numbers, multiple choices joined by "; ". Import: first row as column names (optional); each column to a field of the same name, a new text field, or skipped; values converted per type (a Link by its record's title, matched once); optionally keep the file's IDs. A report gives rows imported, rows skipped (required field empty, ID taken) and unreadable values. | Done |
+| CSV | From the list menu. Export: the records the list shows (filter and Find), every field, as RFC 4180 UTF-8 with a byte-order mark; dates/times ISO, checkboxes yes/no, ratings as numbers, multiple choices and several linked titles joined by "; ". Import: first row as column names (optional); each column to a field of the same name, a new text field, or skipped; values converted per type (a Link by its record's title, matched once; several links by "; "-separated titles, each matched); optionally keep the file's IDs. A report gives rows imported, rows skipped (required field empty, ID taken) and unreadable values. | Done |
 
 ## Field types
 
@@ -98,15 +98,23 @@ the copies, and new choices are links again.
 
 - A Link field with source Record names a target database (any, including
   this one) and a **display field** of it (what the link shows; the first
-  field by default). One linked record per Link field.
+  field by default). One linked record per Link field, or with **Allow several
+  links** any number, in the order chosen (e.g. a wine's aromas).
 - Record view: the linked record's display value; tap to open it; choose a
   record from a searchable list; remove. The list offers a menu for each field
   of the target database that sorts its records into a few groups (2–30
   values, e.g. an aroma's Type and Category) to narrow it, and shows those
-  values under each title.
+  values under each title. With several links: the linked records as chips
+  (tap to open, × to remove) and **Add records**, a chooser where records are
+  ticked on and off until **Done**; links to deleted records show their saved
+  title, marked deleted. The list shows the titles joined ("Cherry, Plum") and
+  sorts by them; filters test that text (contains…, by saved titles).
+- Allowing several links keeps each record's link; going back to one keeps the
+  first (warn), as multiple-choice Lists do.
 - **Linked** fields: read-only live display of a field of the record linked
   through a chosen Link field of the same database. Shown in the record view
-  and as list columns; Find matches them.
+  and as list columns; Find matches them. Through several links, the distinct
+  values of every linked record, joined in link order.
 - **Backlinks**: a record lists the records (in any database) linking to it,
   grouped by database and field; tap to open; "+" creates a new record there,
   already linked.
@@ -119,7 +127,8 @@ the copies, and new choices are links again.
   which gets a new id) offers **Relink by title**, on by default, with a
   preview of the counts: each link whose snapshot title matches exactly one
   record there (ignoring case) is relinked; the rest keep their snapshot and
-  show as unavailable. Off, the links are cleared. Linked fields showing
+  show as unavailable (with several links, each link on its own). Off, the
+  links are cleared. Linked fields showing
   through it move to the field of the same name. A link is only resolved in
   its field's current database, never by record id alone.
 - Deleting a database records its name in every Link field pointing at it.
@@ -177,7 +186,9 @@ Plain SQLite (not Room — schemas are user-defined at runtime):
   Deleting or retyping a column rebuilds the table (Android's SQLite has no
   `DROP COLUMN` before Android 14); retyped values are converted with `CAST`.
 - Side tables per field: `list_f<id>` (multiple choices: record id, value),
-  `link_f<id>` (link snapshots: record id, name, thumbnail). Plain SQL for
+  `link_f<id>` (link snapshots: record id, name, thumbnail), `links_f<id>`
+  (Link fields allowing several, which have no record column: record id, uri,
+  name; in the order made). Plain SQL for
   filters and counts, without relying on SQLite JSON functions on older
   Android versions.
 - Dates/times stored as ISO 8601 text.

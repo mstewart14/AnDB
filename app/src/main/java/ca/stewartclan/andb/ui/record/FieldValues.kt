@@ -62,6 +62,8 @@ object FieldValues {
     /** One-line text for [value] of [field], as list rows and read-only displays show it. */
     fun display(field: FieldDef, value: Any?): String = when {
         value == null -> ""
+        // Several links, by their saved titles.
+        value is List<*> -> value.joinToString(", ")
         field.type == FieldType.BOOLEAN -> if (value == 1L) "✓" else ""
         field.type == FieldType.DATE -> parse(value) { dateFormat.format(LocalDate.parse(it)) }
         field.type == FieldType.TIME -> parse(value) { timeFormat.format(LocalTime.parse(it)) }

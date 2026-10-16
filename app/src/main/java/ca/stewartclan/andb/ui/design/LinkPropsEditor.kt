@@ -32,18 +32,27 @@ data class LinkDraft(
     val displayFieldId: Long? = null,
     /** Kept while [databaseId] is still the deleted database it names. */
     val missingName: String? = null,
-    val copyPhotos: Boolean = false
+    val copyPhotos: Boolean = false,
+    val multiple: Boolean = false
 ) {
     /** The settings, or null while a record link has no database chosen. */
     fun toProps(): LinkProps? = when (source) {
         LinkSource.PHOTO -> LinkProps(LinkSource.PHOTO, copyPhotos = copyPhotos)
-        LinkSource.RECORD -> databaseId?.let { LinkProps(LinkSource.RECORD, it, displayFieldId, missingName) }
+        LinkSource.RECORD -> databaseId?.let {
+            LinkProps(LinkSource.RECORD, it, displayFieldId, missingName, multiple = multiple)
+        }
         LinkSource.CONTACT, LinkSource.FILE -> LinkProps(source)
     }
 
     companion object {
-        fun of(props: LinkProps) =
-            LinkDraft(props.source, props.databaseId, props.displayFieldId, props.missingName, props.copyPhotos)
+        fun of(props: LinkProps) = LinkDraft(
+            props.source,
+            props.databaseId,
+            props.displayFieldId,
+            props.missingName,
+            props.copyPhotos,
+            props.multiple
+        )
 
         val Saver = Saver<LinkDraft, String>(
             save = { Json.encodeToString(serializer(), it) },
@@ -82,20 +91,39 @@ fun LinkPropsEditor(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp)
         )
-        if (draft.source == LinkSource.RECORD) RecordTarget(draft, onDraftChange, lookup)
-        if (draft.source == LinkSource.PHOTO) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.link_copy_photos), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(R.string.link_copy_photos_explained),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(checked = draft.copyPhotos, onCheckedChange = { onDraftChange(draft.copy(copyPhotos = it)) })
-            }
+        if (draft.source == LinkSource.RECORD) {
+            RecordTarget(draft, onDraftChange, lookup)
+            SwitchRow(
+                stringResource(R.string.link_multiple),
+                stringResource(R.string.link_multiple_explained),
+                checked = draft.multiple,
+                onCheckedChange = { onDraftChange(draft.copy(multiple = it)) }
+            )
         }
+        if (draft.source == LinkSource.PHOTO) {
+            SwitchRow(
+                stringResource(R.string.link_copy_photos),
+                stringResource(R.string.link_copy_photos_explained),
+                checked = draft.copyPhotos,
+                onCheckedChange = { onDraftChange(draft.copy(copyPhotos = it)) }
+            )
+        }
+    }
+}
+
+/** A setting turned on or off: its [title], what it does, and the switch. */
+@Composable
+private fun SwitchRow(title: String, explanation: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

@@ -18,6 +18,7 @@ import ca.stewartclan.andb.data.Record
 import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.RequiredRule
+import ca.stewartclan.andb.data.linkValues
 import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.Facet
 import ca.stewartclan.andb.ui.common.LinkChoices
@@ -48,6 +49,8 @@ data class RecordUiState(
     val chosen: Map<Long, List<String>>,
     /** Each Link field's link, or null for none, by field id. */
     val links: Map<Long, LinkValue?>,
+    /** The links of each Link field allowing several, in order, by field id. */
+    val linkLists: Map<Long, List<LinkValue>>,
     /** What each List field offers, by field id. */
     val listChoices: Map<Long, List<String>>,
     /** For each Link field to records: the titles of the records it can link to, by record id. */
@@ -69,13 +72,16 @@ data class RecordUiState(
     val index: Int get() = if (isNew) recordIds.size else recordIds.indexOf(record.id)
 
     /** The edited values as they would be stored. */
-    val values: Map<Long, Any?> get() = RequiredFields.values(fields, drafts) + links
+    val values: Map<Long, Any?> get() = RequiredFields.values(fields, drafts) + links + linkLists
 
     /** Required fields still empty. */
     val missing: List<FieldDef> get() = RequiredRule.missing(fields, values, chosen)
 
     /** Nothing entered at all, as in a record added by mistake. */
-    val isBlank: Boolean get() = RequiredFields.isBlank(fields, drafts, chosen) && links.values.all { it == null }
+    val isBlank: Boolean
+        get() = RequiredFields.isBlank(fields, drafts, chosen) &&
+            links.values.all { it == null } &&
+            linkLists.values.all { it.isEmpty() }
 
     /** Edits not yet stored. A new record with nothing entered has none worth keeping. */
     val hasUnsavedInput: Boolean get() = dirty && !(isNew && isBlank)
@@ -147,11 +153,15 @@ class RecordViewModel(
 
     /** What the field editors need to show [state] and report edits; [readOnly] in protected mode. */
     fun editorContext(state: RecordUiState, readOnly: Boolean, onOpenRecord: (RecordRef) -> Unit) =
-        EditorContext(databaseId, state, readOnly, ::edit, ::toggleChoice, ::setLink, onOpenRecord)
+        EditorContext(databaseId, state, readOnly, ::edit, ::toggleChoice, ::setLinks, onOpenRecord)
 
-    /** Links [field] to [link], or unlinks it when null. */
-    fun setLink(field: FieldDef, link: LinkValue?) = _state.update {
-        it?.copy(links = it.links + (field.id to link), dirty = true)
+    /** Links [field] to [links], in order: at most the first, unless it allows several. */
+    fun setLinks(field: FieldDef, links: List<LinkValue>) = _state.update {
+        if (field.isMultiLink) {
+            it?.copy(linkLists = it.linkLists + (field.id to links), dirty = true)
+        } else {
+            it?.copy(links = it.links + (field.id to links.firstOrNull()), dirty = true)
+        }
     }
 
     fun toggleChoice(field: FieldDef, choice: String) = _state.update {
@@ -187,6 +197,7 @@ class RecordViewModel(
             drafts = drafts(state.record),
             chosen = state.record.choices,
             links = links(state.fields, state.record),
+            linkLists = linkLists(state.fields, state.record),
             dirty = false
         )?.withStoredWarning()
     }
@@ -255,7 +266,10 @@ class RecordViewModel(
                 record = stored,
                 recordIds = if (state.isNew) current.recordIds + recordId else current.recordIds,
                 // Edits made while saving are still unsaved.
-                dirty = current.drafts != state.drafts || current.chosen != state.chosen || current.links != state.links
+                dirty = current.drafts != state.drafts ||
+                    current.chosen != state.chosen ||
+                    current.links != state.links ||
+                    current.linkLists != state.linkLists
             )
         }
         true
@@ -279,7 +293,11 @@ class RecordViewModel(
         val recordTitles = _state.value?.recordTitles ?: choices.orEmpty().mapValues { it.value.titles }
         val linkFacets = _state.value?.linkFacets ?: choices.orEmpty().mapValues { it.value.facets }
         val linkedValues = _state.value?.linkedValues ?: stores.titles.linkedValues(fields)
-        val links = links(fields, record) + prelinked(recordTitles)
+        // A new record started from a backlink begins linked to that record.
+        val start = prelinked(recordTitles)
+        val multi = fields.filter { it.isMultiLink }.map { it.id }.toSet()
+        val links = links(fields, record) + start.filterKeys { it !in multi }
+        val linkLists = linkLists(fields, record) + start.filterKeys { it in multi }.mapValues { listOf(it.value) }
         _state.value = RecordUiState(
             fields = fields,
             recordIds = browseOrder.arrange(databaseId, records.recordIds(databaseId)),
@@ -287,6 +305,7 @@ class RecordViewModel(
             drafts = drafts(record),
             chosen = record.choices,
             links = links,
+            linkLists = linkLists,
             listChoices = listChoices,
             recordTitles = recordTitles,
             linkFacets = linkFacets,
@@ -370,12 +389,17 @@ class RecordViewModel(
     }
 }
 
-/** Editor text of [record]'s values; links are kept apart, as [links]. */
-private fun drafts(record: Record): Map<Long, String> =
-    record.values.filterValues { it !is LinkValue }.mapValues { (_, v) -> FieldValues.toDraft(v) }
+/** Editor text of [record]'s values; links are kept apart, as [links] and [linkLists]. */
+private fun drafts(record: Record): Map<Long, String> = record.values
+    .filterValues { it !is LinkValue && it !is List<*> }
+    .mapValues { (_, v) -> FieldValues.toDraft(v) }
 
-private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> =
-    fields.filter { it.type == FieldType.LINK }.associate { it.id to record.values[it.id] as? LinkValue }
+private fun links(fields: List<FieldDef>, record: Record): Map<Long, LinkValue?> = fields
+    .filter { it.type == FieldType.LINK && !it.isMultiLink }
+    .associate { it.id to record.values[it.id] as? LinkValue }
+
+private fun linkLists(fields: List<FieldDef>, record: Record): Map<Long, List<LinkValue>> =
+    fields.filter { it.isMultiLink }.associate { it.id to linkValues(record.values[it.id]) }
 
 /**
  * A stored record missing a field made required since it was entered says so at once; a new one

@@ -9,6 +9,7 @@ object RequiredRule {
     fun hasValue(field: FieldDef, value: Any?, choices: List<String>): Boolean = when {
         field.isMultiList -> choices.isNotEmpty()
         value == null -> false
+        value is List<*> -> value.isNotEmpty()
         value is String -> value.isNotBlank()
         // A rating of 0 stars is how "no rating" is stored.
         field.type == FieldType.RATING -> value != 0L

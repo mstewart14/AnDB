@@ -21,6 +21,31 @@ class FieldDefTest {
     }
 
     @Test
+    fun severalLinksHaveNoColumnButHaveValues() {
+        val several = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a", multiple = true))
+        assertTrue(several.isMultiLink)
+        assertEquals(Storage.NONE, several.storage)
+        assertTrue(several.hasValues)
+        assertTrue(several.isTextual)
+        assertFalse(field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a")).isMultiLink)
+        // Only links to records can be several.
+        assertFalse(field(FieldType.LINK, LinkProps(LinkSource.PHOTO, multiple = true)).isMultiLink)
+    }
+
+    @Test
+    fun linkedRecordIdsKeepOnlyLinksIntoTheFieldsDatabase() {
+        val several = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a", multiple = true))
+        val links = listOf(
+            LinkValue(RecordRef("a", 4).uri, "Plum", null),
+            LinkValue(RecordRef("old", 9).uri, "Pepper", null),
+            LinkValue(RecordRef("a", 2).uri, "Cherry", null)
+        )
+        assertEquals(listOf(4L, 2L), several.linkedRecordIds(links))
+        assertEquals(listOf(4L), several.linkedRecordIds(links.first()))
+        assertEquals(emptyList<Long>(), several.linkedRecordIds(null))
+    }
+
+    @Test
     fun keepsValuesWhenStorageMatchesOrThereWereNone() {
         assertTrue(field(FieldType.STRING).keepsValuesAs(field(FieldType.EMAIL)))
         assertTrue(field(FieldType.INTEGER).keepsValuesAs(field(FieldType.RATING)))

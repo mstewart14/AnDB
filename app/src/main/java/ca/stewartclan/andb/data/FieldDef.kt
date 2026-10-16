@@ -12,8 +12,11 @@ data class FieldDef(
     /** A List allowing several choices keeps them in a side table instead of a record column. */
     val isMultiList: Boolean get() = (props as? ListProps)?.multiple == true
 
+    /** A Link to records allowing several keeps them in a side table instead of a record column. */
+    val isMultiLink: Boolean get() = recordLink?.multiple == true
+
     /** How this field's values sit in the record table; [Storage.NONE] if not there. */
-    val storage: Storage get() = if (isMultiList) Storage.NONE else type.storage
+    val storage: Storage get() = if (isMultiList || isMultiLink) Storage.NONE else type.storage
 
     /** Whether this Link field and [other] link to the same kind of thing (and database, for records). */
     fun linksTheSameWay(other: FieldDef): Boolean {
@@ -35,11 +38,14 @@ data class FieldDef(
     fun linkedRecordId(link: LinkValue?): Long? = link?.let { RecordRef.parse(it.uri) }
         ?.takeIf { it.databaseId == recordLink?.databaseId }?.recordId
 
+    /** The records this Link field's stored [value] (one link or several) points at, as [linkedRecordId]. */
+    fun linkedRecordIds(value: Any?): List<Long> = linkValues(value).mapNotNull { linkedRecordId(it) }
+
     /** Whether values are text (or may be, as IDs), so text matching and case apply. */
-    val isTextual: Boolean get() = isMultiList || storage == Storage.TEXT || storage == Storage.ANY
+    val isTextual: Boolean get() = isMultiList || isMultiLink || storage == Storage.TEXT || storage == Storage.ANY
 
     /** Whether the field holds values at all, in a record column or a side table. */
-    val hasValues: Boolean get() = storage != Storage.NONE || isMultiList
+    val hasValues: Boolean get() = storage != Storage.NONE || isMultiList || isMultiLink
 
     /**
      * Whether changing this field into [new] keeps its values as they are. Becoming an ID replaces

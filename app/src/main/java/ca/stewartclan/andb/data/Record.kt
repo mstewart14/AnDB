@@ -2,7 +2,8 @@ package ca.stewartclan.andb.data
 
 /**
  * One record. [values] holds each stored field's column value by field id (String, Long or
- * Double, or null); [choices] holds each multiple-choice List field's choices in the order made.
+ * Double, or null; a [LinkValue] for a Link field, or a list of them, in the order made, for one
+ * allowing several); [choices] holds each multiple-choice List field's choices in the order made.
  */
 data class Record(
     val id: Long,

@@ -88,6 +88,20 @@ class CsvValuesTest {
     }
 
     @Test
+    fun severalLinksMatchEachTitle() {
+        val authors = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "authors", multiple = true))
+        val titles = mapOf(1L to "Le Guin", 2L to "Banks", 3L to "Atwood")
+        assertEquals(
+            CellValue.Value(
+                listOf(LinkValue("andb://authors/2", "Banks", null), LinkValue("andb://authors/1", "Le Guin", null))
+            ),
+            CsvValues.import(authors, "banks; Le Guin ;;BANKS", titles)
+        )
+        assertEquals(CellValue.Invalid, CsvValues.import(authors, "Banks; Pratchett", titles))
+        assertEquals(CellValue.Value(null), CsvValues.import(authors, " ", titles))
+    }
+
+    @Test
     fun whatCanBeImported() {
         assertTrue(field(FieldType.STRING).canImport)
         assertTrue(field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a")).canImport)

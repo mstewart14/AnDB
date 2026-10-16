@@ -55,7 +55,7 @@ fun PhotoEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val name = field.name
     val link = ctx.state.links[field.id]
     val readOnly = ctx.readOnly
-    val onLink = { value: LinkValue? -> ctx.onLink(field, value) }
+    val onLink = { value: LinkValue? -> ctx.link(field, value) }
     val copies = (field.props as? LinkProps)?.copyPhotos == true
     val photos = rememberPhotoAccess()
     val scope = rememberCoroutineScope()

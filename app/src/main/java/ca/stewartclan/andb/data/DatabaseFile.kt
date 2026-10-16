@@ -15,6 +15,8 @@ import java.io.File
  * - `list_f<field id>`: the choices of a multiple-choice List field, one row per record and choice.
  * - `link_f<field id>`: the snapshot (name, thumbnail) of each record's link in a Link field; the
  *   link's uri is in the record column.
+ * - `links_f<field id>`: the links of a Link field allowing several, one row per record and link
+ *   (uri and snapshot name), in the order made; such a field has no record column.
  * - `andb_view`: named list views, with their columns and sort keys as JSON.
  * - `andb_filter`: saved filters, with their conditions as JSON.
  */
@@ -74,6 +76,8 @@ internal object DatabaseFile {
     fun listTable(fieldId: Long) = "list_f$fieldId"
 
     fun linkTable(fieldId: Long) = "link_f$fieldId"
+
+    fun linkListTable(fieldId: Long) = "links_f$fieldId"
 
     /** `andb_meta` key holding the next value of an increment ID field. */
     fun nextIdKey(fieldId: Long) = "next_id.$fieldId"

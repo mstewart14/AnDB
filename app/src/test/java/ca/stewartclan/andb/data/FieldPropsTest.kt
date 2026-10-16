@@ -70,5 +70,9 @@ class FieldPropsTest {
     fun recordLinkPropsRoundTrip() {
         val props = LinkProps(LinkSource.RECORD, "db", 7)
         assertEquals(props, FieldProps.decode(FieldType.LINK, FieldProps.encode(props)))
+        val several = props.copy(multiple = true)
+        assertEquals(several, FieldProps.decode(FieldType.LINK, FieldProps.encode(several)))
+        // Fields saved before several links existed link to one record.
+        assertEquals(false, (FieldProps.decode(FieldType.LINK, """{"source":"record"}""") as LinkProps).multiple)
     }
 }

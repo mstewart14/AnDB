@@ -32,6 +32,9 @@ internal fun SQLiteDatabase.writeValues(
     )
     // A link's uri goes in the column, its snapshot in the field's link table.
     links.forEach { (fieldId, value) -> writeLink(fieldId, recordId, value as? LinkValue) }
+    values.filterKeys { byId[it]?.isMultiLink == true }.forEach { (fieldId, value) ->
+        writeLinkList(fieldId, recordId, linkValues(value))
+    }
     choices.filterKeys { byId[it]?.isMultiList == true }.forEach { (fieldId, chosen) ->
         writeChoices(fieldId, recordId, chosen)
     }
@@ -65,6 +68,8 @@ private fun sortExpression(field: FieldDef): String? = when {
     field.type == FieldType.MODIFIED -> "_modified"
     field.isMultiList ->
         "(SELECT group_concat(value, ', ') FROM ${DatabaseFile.listTable(field.id)} WHERE record_id = record._id)"
+    field.isMultiLink ->
+        "(SELECT group_concat(name, ', ') FROM ${DatabaseFile.linkListTable(field.id)} WHERE record_id = record._id)"
     // Links sort by the linked item's name.
     field.type == FieldType.LINK ->
         "(SELECT name FROM ${DatabaseFile.linkTable(field.id)} WHERE record_id = record._id)"
@@ -78,7 +83,9 @@ internal fun SQLiteDatabase.readRecords(fields: List<FieldDef>, onlyId: Long?, o
     val columns = stored.joinToString("") { ", ${DatabaseFile.columnName(it.id)}" }
     val where = if (onlyId != null) "WHERE _id = $onlyId" else ""
     val choices = fields.filter { it.isMultiList }.associate { it.id to readChoices(it.id, onlyId) }
-    val links = fields.filter { it.type == FieldType.LINK }.associate { it.id to readLinkSnapshots(it.id, onlyId) }
+    val links = fields.filter { it.type == FieldType.LINK && !it.isMultiLink }
+        .associate { it.id to readLinkSnapshots(it.id, onlyId) }
+    val linkLists = fields.filter { it.isMultiLink }.associate { it.id to readLinkLists(it.id, onlyId) }
     return rawQuery("SELECT _id, _created, _modified$columns FROM record $where ORDER BY $orderBy", null).use { c ->
         buildList {
             while (c.moveToNext()) {
@@ -96,7 +103,7 @@ internal fun SQLiteDatabase.readRecords(fields: List<FieldDef>, onlyId: Long?, o
                             } else {
                                 value
                             }
-                        },
+                        } + linkLists.mapValues { (_, byRecord) -> byRecord[recordId].orEmpty() },
                         choices = choices.mapValues { (_, byRecord) -> byRecord[recordId].orEmpty() }
                     )
                 )

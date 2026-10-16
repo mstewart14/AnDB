@@ -41,10 +41,10 @@ fun DeviceLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     val link = ctx.state.links[field.id]
     val contactPicker = rememberLauncherForActivityResult(PickContact()) { uri ->
-        if (uri != null) scope.launch { links.contact(uri)?.let { ctx.onLink(field, it) } }
+        if (uri != null) scope.launch { links.contact(uri)?.let { ctx.link(field, it) } }
     }
     val filePicker = rememberLauncherForActivityResult(OpenDocument()) { uri ->
-        if (uri != null) scope.launch { ctx.onLink(field, links.file(uri)) }
+        if (uri != null) scope.launch { ctx.link(field, links.file(uri)) }
     }
     val available by produceState<Boolean?>(null, link?.uri) { value = link?.let { links.isAvailable(source, it.uri) } }
     val cantOpen = stringResource(R.string.link_open_failed)
@@ -73,7 +73,7 @@ fun DeviceLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
                         filePicker.launch(arrayOf("*/*"))
                     }
                 },
-                onRemove = { ctx.onLink(field, null) }
+                onRemove = { ctx.link(field, null) }
             )
         }
     }

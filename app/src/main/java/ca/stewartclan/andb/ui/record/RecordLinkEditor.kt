@@ -9,16 +9,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,7 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -85,7 +92,7 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
                     Text(stringResource(if (link == null) R.string.record_link_choose else R.string.photo_change))
                 }
                 if (link != null) {
-                    TextButton(onClick = { ctx.onLink(field, null) }) { Text(stringResource(R.string.action_remove)) }
+                    TextButton(onClick = { ctx.link(field, null) }) { Text(stringResource(R.string.action_remove)) }
                 }
             }
         }
@@ -96,7 +103,7 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
             titles = titles,
             facets = ctx.state.linkFacets[field.id].orEmpty(),
             onPick = { recordId ->
-                ctx.onLink(field, LinkValue(RecordRef(databaseId, recordId).uri, titles.getValue(recordId), null))
+                ctx.link(field, LinkValue(RecordRef(databaseId, recordId).uri, titles.getValue(recordId), null))
                 choosing = false
             },
             onDismiss = { choosing = false }
@@ -105,8 +112,89 @@ fun RecordLinkEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
 }
 
 /**
- * A searchable list of records, by title, to pick one. Each of [facets] gets a menu to show only
- * the records with one of its values, and their values are shown under each title.
+ * Links to several records: each linked record's title as a chip (tap to open it, × to remove the
+ * link), and a button to add more. A link whose record was deleted shows its saved title, marked.
+ */
+@Composable
+fun RecordLinksEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier) {
+    val databaseId = field.recordLink?.databaseId ?: return
+    val links = ctx.state.linkLists[field.id].orEmpty()
+    val titles = ctx.state.recordTitles[field.id].orEmpty()
+    var choosing by rememberSaveable { mutableStateOf(false) }
+
+    Column(modifier) {
+        Text(
+            field.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            links.forEach { link ->
+                LinkChip(
+                    name = link.name,
+                    title = field.linkedRecordId(link)?.let { titles[it] },
+                    readOnly = ctx.readOnly,
+                    onOpen = { RecordRef.parse(link.uri)?.let(ctx.onOpenRecord) },
+                    onRemove = { ctx.onLinks(field, links - link) }
+                )
+            }
+        }
+        if (!ctx.readOnly) {
+            TextButton(onClick = { choosing = true }) { Text(stringResource(R.string.record_link_add)) }
+        }
+    }
+    if (choosing) {
+        val linked = field.linkedRecordIds(links).toSet()
+        RecordChooser(
+            title = field.name,
+            titles = titles,
+            facets = ctx.state.linkFacets[field.id].orEmpty(),
+            chosen = linked,
+            onPick = { recordId ->
+                val uri = RecordRef(databaseId, recordId).uri
+                val changed = if (recordId in linked) {
+                    links.filterNot { it.uri == uri }
+                } else {
+                    links + LinkValue(uri, titles.getValue(recordId), null)
+                }
+                ctx.onLinks(field, changed)
+            },
+            onDismiss = { choosing = false }
+        )
+    }
+}
+
+/**
+ * A linked record's [title] (its saved [name], marked deleted, if it's gone): tap to [onOpen] it,
+ * × to [onRemove] the link unless [readOnly].
+ */
+@Composable
+private fun LinkChip(name: String, title: String?, readOnly: Boolean, onOpen: () -> Unit, onRemove: () -> Unit) {
+    val shown = title ?: stringResource(R.string.record_link_deleted_named, name)
+    InputChip(
+        selected = false,
+        onClick = { if (title != null) onOpen() },
+        label = { Text(shown, color = if (title == null) MaterialTheme.colorScheme.error else Color.Unspecified) },
+        trailingIcon = if (readOnly) {
+            null
+        } else {
+            {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.record_link_remove, shown),
+                    modifier = Modifier
+                        .size(InputChipDefaults.IconSize)
+                        .clickable(onClick = onRemove)
+                )
+            }
+        }
+    )
+}
+
+/**
+ * A searchable list of records, by title, to pick one; or with [chosen], to tick any number on
+ * and off, staying open until done. Each of [facets] gets a menu to show only the records with one
+ * of its values, and their values are shown under each title.
  */
 @Composable
 private fun RecordChooser(
@@ -114,7 +202,8 @@ private fun RecordChooser(
     titles: Map<Long, String>,
     facets: List<Facet>,
     onPick: (Long) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    chosen: Set<Long>? = null
 ) {
     var search by remember { mutableStateOf("") }
     var narrowed by remember { mutableStateOf(mapOf<Long, String>()) }
@@ -148,32 +237,49 @@ private fun RecordChooser(
                 LazyColumn(Modifier.heightIn(max = CHOOSER_HEIGHT)) {
                     items(shown, key = { it.key }) { (recordId, text) ->
                         val groups = facets.flatMap { it.byRecord[recordId].orEmpty() }.joinToString(" · ")
-                        ChoiceRow(text, groups, onClick = { onPick(recordId) })
+                        ChoiceRow(text, groups, chosen?.let { recordId in it }, onClick = { onPick(recordId) })
                         HorizontalDivider()
                     }
                 }
             }
         },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+        confirmButton = {
+            if (chosen != null) TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
+        },
+        dismissButton = {
+            if (chosen == null) TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
     )
 }
 
-/** A record's [title], with its facet values ([groups]) below it in small print. */
+/**
+ * A record's [title], with its facet values ([groups]) below it in small print, and when choosing
+ * several, a tick if [checked].
+ */
 @Composable
-private fun ChoiceRow(title: String, groups: String, onClick: () -> Unit) {
-    Column(
-        Modifier
+private fun ChoiceRow(title: String, groups: String, checked: Boolean?, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp)
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
-        if (groups.isNotEmpty()) {
-            Text(
-                groups,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (groups.isNotEmpty()) {
+                Text(
+                    groups,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (checked == true) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = stringResource(R.string.record_link_linked),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

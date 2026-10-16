@@ -7,7 +7,10 @@ import android.database.sqlite.SQLiteDatabase
 /** Adds the record column for a new or newly stored [field]. */
 internal fun SQLiteDatabase.addColumn(field: FieldDef, idGenerator: IdGenerator) {
     if (field.isMultiList) createListTable(field.id)
-    if (field.type == FieldType.LINK) createLinkTable(field.id)
+    when {
+        field.isMultiLink -> createLinkListTable(field.id)
+        field.type == FieldType.LINK -> createLinkTable(field.id)
+    }
     val sqlType = field.storage.sqlType ?: return
     val column = DatabaseFile.columnName(field.id)
     execSQL("ALTER TABLE record ADD COLUMN $column $sqlType")
@@ -15,6 +18,28 @@ internal fun SQLiteDatabase.addColumn(field: FieldDef, idGenerator: IdGenerator)
         createUniqueIndex(column)
         backfillIds(field, idGenerator)
     }
+}
+
+/**
+ * Moves field [old]'s values to where [new] keeps them, in an order where each step finds the
+ * layout it expects: links pointed at another database (with [relinked] ones, see [repointLinks])
+ * while still where they were, values going to a side table before the record column changes,
+ * and values coming back from one after.
+ */
+internal fun SQLiteDatabase.reshapeField(
+    fields: List<FieldDef>,
+    old: FieldDef,
+    new: FieldDef,
+    relinked: Map<Long, LinkValue>?,
+    idGenerator: IdGenerator
+) {
+    repointLinks(old, new, relinked)
+    if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
+    startMultipleLinks(old, new)
+    if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
+    if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
+    endMultipleLinks(old, new)
+    updateLink(old, new)
 }
 
 /**
@@ -89,32 +114,21 @@ internal fun SQLiteDatabase.updateIds(old: FieldDef, new: FieldDef, idGenerator:
 }
 
 /**
- * Starts or ends a field's life as a Link: a new Link starts empty with its snapshot table (other
- * values aren't links); a Link now linking to something else starts empty again, unless given
- * [relinked] links to replace the old ones with (others stay as they were); a former Link loses
- * its snapshots.
+ * Starts or ends a field's life as a Link, once its storage has changed: a new Link starts empty
+ * with its snapshot or link list table (other values aren't links); a former Link loses them.
+ * Pointing a Link elsewhere is [repointLinks], done first.
  */
-internal fun SQLiteDatabase.updateLink(old: FieldDef, new: FieldDef, relinked: Map<Long, LinkValue>? = null) {
-    val column = DatabaseFile.columnName(new.id)
+internal fun SQLiteDatabase.updateLink(old: FieldDef, new: FieldDef) {
     if (new.type == FieldType.LINK && old.type != FieldType.LINK) {
-        execSQL("UPDATE record SET $column = NULL")
-        createLinkTable(new.id)
-    } else if (new.type == FieldType.LINK && !old.linksTheSameWay(new) && relinked != null) {
-        relinked.forEach { (recordId, link) ->
-            execSQL("UPDATE record SET $column = ? WHERE _id = ?", arrayOf(link.uri, recordId))
-            execSQL(
-                "INSERT OR REPLACE INTO ${DatabaseFile.linkTable(
-                    new.id
-                )} (record_id, name, thumbnail) VALUES (?, ?, ?)",
-                arrayOf(recordId, link.name, link.thumbnail)
-            )
+        if (new.isMultiLink) {
+            createLinkListTable(new.id)
+        } else {
+            execSQL("UPDATE record SET ${DatabaseFile.columnName(new.id)} = NULL")
+            createLinkTable(new.id)
         }
-    } else if (new.type == FieldType.LINK && !old.linksTheSameWay(new)) {
-        // Now linking to something else: the old links mean nothing.
-        execSQL("UPDATE record SET $column = NULL")
-        execSQL("DELETE FROM ${DatabaseFile.linkTable(new.id)}")
     } else if (old.type == FieldType.LINK && new.type != FieldType.LINK) {
         execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkTable(old.id)}")
+        execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkListTable(old.id)}")
     }
 }
 

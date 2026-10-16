@@ -7,6 +7,7 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_more">More options</string>
     <string name="action_add">Add</string>
+    <string name="action_done">Done</string>
     <string name="action_save">Save</string>
     <string name="action_back">Back</string>
     <string name="action_move_up">Move up</string>
@@ -292,6 +293,14 @@
     <string name="record_link_any">Any</string>
     <string name="link_copy_photos">Copy photos into AnDB</string>
     <string name="link_copy_photos_explained">Keeps a copy (up to 2048 px) in the database, so photos stay even if deleted from the gallery, and travel with exports. Turning this on copies the photos already linked.</string>
+    <string name="link_multiple">Allow several links</string>
+    <string name="link_multiple_explained">A record can link to any number of records here, e.g. a wine to each of its aromas.</string>
+    <string name="link_summary_multiple">several</string>
+    <string name="link_single_warning">Records with several links will keep only the first.</string>
+    <string name="record_link_add">Add records</string>
+    <string name="record_link_linked">Linked</string>
+    <string name="record_link_remove">Remove %1$s</string>
+    <string name="record_link_deleted_named">%1$s (deleted)</string>
     <string name="link_database_deleted_named">“%1$s”, the database this field linked to, was deleted. Choose its replacement.</string>
     <string name="link_database_deleted">The database this field linked to was deleted. Choose its replacement.</string>
     <string name="list_link_broken">%1$s links to a deleted database.</string>

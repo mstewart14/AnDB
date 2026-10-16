@@ -18,6 +18,9 @@ enum class ChangeEffect {
     /** Records with several choices keep only the first. */
     KEEP_FIRST_CHOICE,
 
+    /** Records with several links keep only the first. */
+    KEEP_FIRST_LINK,
+
     /** Values are converted to the new type, or removed. */
     CONVERT,
 
@@ -30,6 +33,7 @@ fun changeEffect(old: FieldDef?, new: FieldDef): ChangeEffect? = when {
     new.type == FieldType.ID -> idChangeEffect(old, new)
     old == null -> null
     old.isMultiList && new.type == FieldType.LIST && !new.isMultiList -> ChangeEffect.KEEP_FIRST_CHOICE
+    old.isMultiLink && new.type == FieldType.LINK && !new.isMultiLink -> ChangeEffect.KEEP_FIRST_LINK
     isRepoint(old, new) -> ChangeEffect.RELINK
     !old.keepsValuesAs(new) -> ChangeEffect.CONVERT
     else -> null

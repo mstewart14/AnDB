@@ -19,12 +19,12 @@ import ca.stewartclan.andb.data.LinkValue
 import ca.stewartclan.andb.data.LinkedProps
 import ca.stewartclan.andb.data.ListView
 import ca.stewartclan.andb.data.Record
-import ca.stewartclan.andb.data.RecordRef
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.SortKey
 import ca.stewartclan.andb.data.ViewRepository
 import ca.stewartclan.andb.data.canBeColumn
 import ca.stewartclan.andb.data.csv.Csv
+import ca.stewartclan.andb.data.linkValues
 import ca.stewartclan.andb.ui.common.BrowseOrder
 import ca.stewartclan.andb.ui.common.RecordTitles
 import ca.stewartclan.andb.ui.common.ReportingViewModel
@@ -80,8 +80,16 @@ private class Loaded(
     val searchable: List<FieldDef> get() = fields.filter { it.isSearchable }
 }
 
-/** A record with its list row and what each searchable field shows, for Find. */
-private class Entry(val record: Record, val row: RecordRow, val texts: Map<Long, String>)
+/**
+ * A record with its list row and what each searchable field shows, for Find; and the titles linked
+ * through each Link field allowing several, which export separates differently.
+ */
+private class Entry(
+    val record: Record,
+    val row: RecordRow,
+    val texts: Map<Long, String>,
+    val linkTitles: Map<Long, List<String>>
+)
 
 private val FieldDef.isSearchable: Boolean get() = canBeColumn && type != FieldType.BOOLEAN
 
@@ -138,7 +146,11 @@ class RecordListViewModel(
         val data = loaded ?: return@launchReporting
         val fields = CsvValues.exported(data.fields)
         val rows = listOf(fields.map { it.name }) + shown.map { entry ->
-            fields.map { CsvValues.export(it, entry.record, entry.texts[it.id].orEmpty()) }
+            fields.map { field ->
+                val shown = entry.linkTitles[field.id]?.joinToString(CsvValues.CHOICE_SEPARATOR)
+                    ?: entry.texts[field.id].orEmpty()
+                CsvValues.export(field, entry.record, shown)
+            }
         }
         write(Csv.write(rows))
         _exported.value = shown.size
@@ -217,6 +229,7 @@ class RecordListViewModel(
         val linked = stores.titles.linkedValues(fields)
         val byId = fields.associateBy { it.id }
         val shownText = { field: FieldDef, record: Record -> shown(field, record, titles, linked, byId) }
+        val multiLinks = fields.filter { it.isMultiLink }
         val entries = records.records(databaseId, view.sort).map { record ->
             Entry(
                 record,
@@ -229,7 +242,8 @@ class RecordListViewModel(
                         )
                     }
                 ),
-                searchable.associate { it.id to shownText(it, record) }
+                searchable.associate { it.id to shownText(it, record) },
+                multiLinks.associate { it.id to linkTitles(it, record.values[it.id], titles) }
             )
         }
         brokenLinks = stores.repair.broken(fields)
@@ -272,10 +286,10 @@ class RecordListViewModel(
         }
     }
 
-    /** What [field] of [record] shows in the list. */
     /**
-     * What [field] of [record] shows. A record link shows its record's title from [titles] if it
-     * still exists; a Linked field shows its value from [linked] for the record its link points at.
+     * What [field] of [record] shows. A record link shows its record's title (each one's, for a
+     * field allowing several) as [linkTitles]; a Linked field shows its value from [linked] for the
+     * record its link points at (the distinct values for each, in link order).
      */
     private fun shown(
         field: FieldDef,
@@ -285,16 +299,21 @@ class RecordListViewModel(
         byId: Map<Long, FieldDef>
     ): String {
         val linkedVia = (field.props as? LinkedProps)?.let { byId[it.linkFieldId] }
-        val link = record.values[(linkedVia ?: field).id] as? LinkValue
-        // A link left from a database the field linked to before shows only its saved title.
-        val recordId = (linkedVia ?: field).linkedRecordId(link)
         return when {
-            field.props is LinkedProps -> recordId?.let { linked[field.id]?.get(it) }.orEmpty()
-            link != null && RecordRef.parse(link.uri) != null -> recordId?.let { titles[field.id]?.get(it) }
-                ?: link.name
+            linkedVia != null -> linkedVia.linkedRecordIds(record.values[linkedVia.id])
+                .mapNotNull { linked[field.id]?.get(it) }.filter { it.isNotBlank() }.distinct().joinToString(", ")
+            field.recordLink != null -> linkTitles(field, record.values[field.id], titles).joinToString(", ")
             else -> FieldValues.shown(field, record)
         }
     }
+
+    /**
+     * The title of each record Link [field]'s stored [value] links to, from [titles] while the
+     * record exists; otherwise (deleted, or left from a database the field linked to before) its
+     * saved title.
+     */
+    private fun linkTitles(field: FieldDef, value: Any?, titles: Map<Long, Map<Long, String>>): List<String> =
+        linkValues(value).map { link -> field.linkedRecordId(link)?.let { titles[field.id]?.get(it) } ?: link.name }
 
     companion object {
         private const val KEY_FIND = "find"

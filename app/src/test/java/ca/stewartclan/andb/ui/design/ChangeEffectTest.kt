@@ -5,6 +5,8 @@ import ca.stewartclan.andb.data.FieldProps
 import ca.stewartclan.andb.data.FieldType
 import ca.stewartclan.andb.data.IdKind
 import ca.stewartclan.andb.data.IdProps
+import ca.stewartclan.andb.data.LinkProps
+import ca.stewartclan.andb.data.LinkSource
 import ca.stewartclan.andb.data.ListProps
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -32,6 +34,23 @@ class ChangeEffectTest {
         assertNull(changeEffect(single, multi))
         assertEquals(ChangeEffect.KEEP_FIRST_CHOICE, changeEffect(multi, single))
         assertEquals(ChangeEffect.CONVERT, changeEffect(multi, field(FieldType.STRING)))
+    }
+
+    @Test
+    fun severalLinks() {
+        val one = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a"))
+        val several = field(FieldType.LINK, LinkProps(LinkSource.RECORD, "a", multiple = true))
+        assertNull(changeEffect(one, several))
+        assertEquals(ChangeEffect.KEEP_FIRST_LINK, changeEffect(several, one))
+        // Pointed elsewhere as well: keeping the first is still worth saying.
+        assertEquals(
+            ChangeEffect.KEEP_FIRST_LINK,
+            changeEffect(several, field(FieldType.LINK, LinkProps(LinkSource.RECORD, "b")))
+        )
+        assertEquals(
+            ChangeEffect.RELINK,
+            changeEffect(several, field(FieldType.LINK, LinkProps(LinkSource.RECORD, "b", multiple = true)))
+        )
     }
 
     @Test

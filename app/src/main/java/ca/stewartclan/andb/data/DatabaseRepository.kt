@@ -105,14 +105,19 @@ class DatabaseRepository(
         withDatabase(id) { readFields() }
     }
 
-    /** The saved title of each link in Link field [fieldId] of database [id], by record id. */
+    /**
+     * The saved title of each link in Link field [fieldId] of database [id], by record id; for a
+     * field allowing several links, by link (its row in the field's link list table).
+     */
     suspend fun linkTitles(id: String, fieldId: Long): Map<Long, String> = withContext(ioDispatcher) {
         withDatabase(id) {
-            rawQuery(
+            val sql = if (readFields().find { it.id == fieldId }?.isMultiLink == true) {
+                "SELECT rowid, name FROM ${DatabaseFile.linkListTable(fieldId)}"
+            } else {
                 "SELECT l.record_id, l.name FROM ${DatabaseFile.linkTable(fieldId)} l " +
-                    "JOIN record r ON r._id = l.record_id WHERE r.${DatabaseFile.columnName(fieldId)} IS NOT NULL",
-                null
-            ).use { c -> buildMap { while (c.moveToNext()) put(c.getLong(0), c.getString(1)) } }
+                    "JOIN record r ON r._id = l.record_id WHERE r.${DatabaseFile.columnName(fieldId)} IS NOT NULL"
+            }
+            rawQuery(sql, null).use { c -> buildMap { while (c.moveToNext()) put(c.getLong(0), c.getString(1)) } }
         }
     }
 
@@ -147,8 +152,9 @@ class DatabaseRepository(
      * position is ignored; see [moveField]). When the storage class changes, values are
      * converted with SQL `CAST` (so text that isn't a number becomes 0), or dropped when the new
      * type has no storage. Becoming an ID, or changing the kind of ID, regenerates every ID. A List
-     * switched to multiple choices keeps each value as a choice; switched back, it keeps the first.
-     * A Link field to records pointed at another database carries over what [repoint] says.
+     * switched to multiple choices keeps each value as a choice; switched back, it keeps the first;
+     * likewise a Link to records allowing several links. A Link field to records pointed at another
+     * database carries over what [repoint] says.
      */
     suspend fun updateField(id: String, field: FieldDef, repoint: Repoint? = null) = mutate {
         withDatabase(id) {
@@ -161,10 +167,7 @@ class DatabaseRepository(
                     "UPDATE andb_field SET name = ?, type = ?, props = ?, required = ? WHERE id = ?",
                     arrayOf(new.name, type.code, FieldProps.encode(new.props), if (new.required) 1 else 0, new.id)
                 )
-                if (new.isMultiList && !old.isMultiList) startMultipleChoices(old)
-                if (old.storage != new.storage) changeColumn(fields, old, new, idGenerator)
-                if (old.isMultiList && !new.isMultiList) endMultipleChoices(new)
-                updateLink(old, new, repoint?.links)
+                reshapeField(fields, old, new, repoint?.links, idGenerator)
                 repoint?.linkedTargets?.forEach { (linkedId, targetId) ->
                     val linked = fields.find { it.id == linkedId }?.props as? LinkedProps ?: return@forEach
                     execSQL(
@@ -200,6 +203,7 @@ class DatabaseRepository(
                 deleteMeta(DatabaseFile.nextIdKey(fieldId))
                 execSQL("DROP TABLE IF EXISTS ${DatabaseFile.listTable(fieldId)}")
                 execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkTable(fieldId)}")
+                execSQL("DROP TABLE IF EXISTS ${DatabaseFile.linkListTable(fieldId)}")
                 val remaining = fields - field
                 writePositions(remaining.map { it.id })
                 if (field.storage != Storage.NONE) {
@@ -220,6 +224,7 @@ class DatabaseRepository(
             val sql = when {
                 field == null -> null
                 field.isMultiList -> "SELECT DISTINCT value FROM ${DatabaseFile.listTable(fieldId)}"
+                field.isMultiLink -> "SELECT DISTINCT name FROM ${DatabaseFile.linkListTable(fieldId)}"
                 field.type == FieldType.LINK -> "SELECT DISTINCT name FROM ${DatabaseFile.linkTable(fieldId)}"
                 field.storage == Storage.NONE -> null
                 else -> "SELECT DISTINCT $column FROM record WHERE $column IS NOT NULL AND $column != ''"

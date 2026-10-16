@@ -30,7 +30,7 @@ val FieldDef.canImport: Boolean
 /**
  * Conversions between records and CSV cells. Export writes what the list shows, except in plain
  * forms where spreadsheets or a later import need them: ISO dates and times, yes/no, numbers
- * (not stars), and multiple choices joined by "; ".
+ * (not stars), and multiple choices or several linked titles joined by "; ".
  */
 object CsvValues {
     const val CHOICE_SEPARATOR = "; "
@@ -72,6 +72,7 @@ object CsvValues {
                 else -> CellValue.Invalid
             }
             cell.isEmpty() -> CellValue.Value(null)
+            field.isMultiLink -> recordLinks(field, cell, titles)
             field.type == FieldType.LINK -> recordLink(field, cell, titles)
             field.type == FieldType.ID -> id(field, cell)
             else -> typed(field, cell)
@@ -105,13 +106,25 @@ object CsvValues {
         }
     }
 
-    private fun recordLink(field: FieldDef, cell: String, titles: Map<Long, String>): CellValue {
+    private fun recordLink(field: FieldDef, cell: String, titles: Map<Long, String>): CellValue =
+        link(field, cell, titles)?.let { CellValue.Value(it) } ?: CellValue.Invalid
+
+    /** Titles separated by ";", each linking as [recordLink] does; invalid unless every one does. */
+    private fun recordLinks(field: FieldDef, cell: String, titles: Map<Long, String>): CellValue {
+        val wanted = cell.split(';').map { it.trim() }.filter { it.isNotEmpty() }
+        val links = wanted.mapNotNull { link(field, it, titles) }.distinctBy { it.uri }
+        val allFound = links.size == wanted.distinctBy { it.lowercase() }.size
+        return if (allFound) CellValue.Value(links) else CellValue.Invalid
+    }
+
+    /** The link to the one record titled [title], ignoring case; null if none or several are. */
+    private fun link(field: FieldDef, title: String, titles: Map<Long, String>): LinkValue? {
         val databaseId = field.recordLink?.databaseId
-        val match = RecordTitles.matching(cell, titles).singleOrNull()
+        val match = RecordTitles.matching(title, titles).singleOrNull()
         return if (databaseId == null || match == null) {
-            CellValue.Invalid
+            null
         } else {
-            CellValue.Value(LinkValue(RecordRef(databaseId, match).uri, titles.getValue(match), null))
+            LinkValue(RecordRef(databaseId, match).uri, titles.getValue(match), null)
         }
     }
 }

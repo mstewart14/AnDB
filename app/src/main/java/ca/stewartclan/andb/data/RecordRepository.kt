@@ -93,7 +93,8 @@ class RecordRepository(private val databases: DatabaseRepository) {
             execSQL("DELETE FROM ${DatabaseFile.listTable(it.id)} WHERE record_id = ?", arrayOf(recordId))
         }
         fields.filter { it.type == FieldType.LINK }.forEach {
-            execSQL("DELETE FROM ${DatabaseFile.linkTable(it.id)} WHERE record_id = ?", arrayOf(recordId))
+            val table = if (it.isMultiLink) DatabaseFile.linkListTable(it.id) else DatabaseFile.linkTable(it.id)
+            execSQL("DELETE FROM $table WHERE record_id = ?", arrayOf(recordId))
         }
         val photos = storedPhotos(recordId)
         execSQL("DELETE FROM record WHERE _id = ?", arrayOf(recordId))
@@ -135,10 +136,17 @@ class RecordRepository(private val databases: DatabaseRepository) {
                 arrayOf(copy, recordId)
             )
         }
-        fields.filter { it.type == FieldType.LINK }.forEach {
+        fields.filter { it.type == FieldType.LINK && !it.isMultiLink }.forEach {
             execSQL(
                 "INSERT INTO ${DatabaseFile.linkTable(it.id)} (record_id, name, thumbnail) " +
                     "SELECT ?, name, thumbnail FROM ${DatabaseFile.linkTable(it.id)} WHERE record_id = ?",
+                arrayOf(copy, recordId)
+            )
+        }
+        fields.filter { it.isMultiLink }.forEach {
+            execSQL(
+                "INSERT INTO ${DatabaseFile.linkListTable(it.id)} (record_id, uri, name) " +
+                    "SELECT ?, uri, name FROM ${DatabaseFile.linkListTable(it.id)} WHERE record_id = ? ORDER BY rowid",
                 arrayOf(copy, recordId)
             )
         }
@@ -173,8 +181,13 @@ class RecordRepository(private val databases: DatabaseRepository) {
             try {
                 databases.read(db.id) {
                     readFields().filter { it.recordLink?.databaseId == id }.map { field ->
-                        val column = DatabaseFile.columnName(field.id)
-                        val ids = rawQuery("SELECT _id FROM record WHERE $column = ? ORDER BY _id", arrayOf(uri))
+                        val sql = if (field.isMultiLink) {
+                            "SELECT DISTINCT record_id FROM ${DatabaseFile.linkListTable(field.id)} " +
+                                "WHERE uri = ? ORDER BY record_id"
+                        } else {
+                            "SELECT _id FROM record WHERE ${DatabaseFile.columnName(field.id)} = ? ORDER BY _id"
+                        }
+                        val ids = rawQuery(sql, arrayOf(uri))
                             .use { c -> buildList { while (c.moveToNext()) add(c.getLong(0)) } }
                         Backlinks(db.id, db.name, field, ids)
                     }

@@ -22,7 +22,10 @@ fun fieldSummary(field: FieldDef, fields: List<FieldDef>, names: SummaryNames): 
     when (val props = field.props) {
         is IdProps -> parts += stringResource(props.kind.labelRes)
         is ListProps -> parts += listSummary(props, names.databases)
-        is LinkProps -> parts += linkSummary(props, names.databases)
+        is LinkProps -> {
+            parts += linkSummary(props, names.databases)
+            if (field.isMultiLink) parts += stringResource(R.string.link_summary_multiple)
+        }
         is LinkedProps -> parts += linkedSummary(field, props, fields, names.linkedTargets)
         NoProps -> Unit
     }

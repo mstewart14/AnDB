@@ -14,10 +14,14 @@ internal fun SQLiteDatabase.pointSelfReferencesAt(from: String, to: String, with
         } ?: return@forEach
         execSQL("UPDATE andb_field SET props = ? WHERE id = ?", arrayOf(FieldProps.encode(props), field.id))
         if (withRecords && props is LinkProps) {
-            val column = DatabaseFile.columnName(field.id)
+            val (table, column) = if (field.isMultiLink) {
+                DatabaseFile.linkListTable(field.id) to "uri"
+            } else {
+                "record" to DatabaseFile.columnName(field.id)
+            }
             val (old, new) = RecordRef(from, 0).uri.dropLast(1) to RecordRef(to, 0).uri.dropLast(1)
             execSQL(
-                "UPDATE record SET $column = replace($column, ?, ?) WHERE $column LIKE ?",
+                "UPDATE $table SET $column = replace($column, ?, ?) WHERE $column LIKE ?",
                 arrayOf(old, new, "$old%")
             )
         }
@@ -30,7 +34,10 @@ internal fun SQLiteDatabase.clearRecords() {
     execSQL("DELETE FROM record")
     execSQL("DELETE FROM andb_photo")
     fields.filter { it.isMultiList }.forEach { execSQL("DELETE FROM ${DatabaseFile.listTable(it.id)}") }
-    fields.filter { it.type == FieldType.LINK }.forEach { execSQL("DELETE FROM ${DatabaseFile.linkTable(it.id)}") }
+    fields.filter { it.type == FieldType.LINK }.forEach {
+        val table = if (it.isMultiLink) DatabaseFile.linkListTable(it.id) else DatabaseFile.linkTable(it.id)
+        execSQL("DELETE FROM $table")
+    }
     fields.filter { it.type == FieldType.ID }.forEach { deleteMeta(DatabaseFile.nextIdKey(it.id)) }
     // Record ids restart too; sqlite_sequence exists once an AUTOINCREMENT table has had a row.
     val hasSequence = longQuery("SELECT COUNT(*) FROM sqlite_master WHERE name = 'sqlite_sequence'") > 0

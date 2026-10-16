@@ -42,10 +42,14 @@ class EditorContext(
     val readOnly: Boolean,
     val onEdit: (FieldDef, String) -> Unit,
     val onToggleChoice: (FieldDef, String) -> Unit,
-    val onLink: (FieldDef, LinkValue?) -> Unit,
+    /** Sets a Link field's links, in order: none, one, or for a field allowing several, any number. */
+    val onLinks: (FieldDef, List<LinkValue>) -> Unit,
     /** Opens a linked record. */
     val onOpenRecord: (RecordRef) -> Unit
-)
+) {
+    /** Links [field] to [link], or unlinks it when null. */
+    fun link(field: FieldDef, link: LinkValue?) = onLinks(field, listOfNotNull(link))
+}
 
 /**
  * The input for one field of the record. Required fields are marked in their label; empty ones
@@ -84,6 +88,7 @@ private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier)
             ListDropdown(field.name, text, choices, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
         }
         FieldType.LINK -> when {
+            field.isMultiLink -> RecordLinksEditor(field, ctx, modifier)
             field.recordLink != null -> RecordLinkEditor(field, ctx, modifier)
             field.isPhotoLink -> PhotoEditor(field, ctx, modifier)
             else -> DeviceLinkEditor(field, ctx, modifier)
@@ -188,10 +193,14 @@ private fun Context.startSafely(intent: Intent) {
 
 private const val NOTE_LINES = 3
 
-/** What Linked [field] shows: its target field of the record linked through its Link field. */
+/**
+ * What Linked [field] shows: its target field of the record linked through its Link field, or of
+ * each record (distinct values, in link order) if that allows several.
+ */
 private fun linkedText(field: FieldDef, state: RecordUiState): String {
     val linkFieldId = (field.props as? LinkedProps)?.linkFieldId
-    val linkField = state.fields.find { it.id == linkFieldId }
-    val recordId = linkField?.linkedRecordId(state.links[linkField.id])
-    return recordId?.let { state.linkedValues[field.id]?.get(it) }.orEmpty()
+    val linkField = state.fields.find { it.id == linkFieldId } ?: return ""
+    val links = if (linkField.isMultiLink) state.linkLists[linkField.id].orEmpty() else state.links[linkField.id]
+    return linkField.linkedRecordIds(links).mapNotNull { state.linkedValues[field.id]?.get(it) }
+        .filter { it.isNotBlank() }.distinct().joinToString(", ")
 }

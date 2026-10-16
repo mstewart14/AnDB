@@ -111,9 +111,8 @@ fun FieldDialog(
                 val new = entered ?: FieldDef(0, 0, "", type, FieldProps.default(type))
                 if (field != null && isRepoint(field, new)) {
                     RelinkOptions(field, new, relink, relinkByTitle, onRelinkChange = { relinkByTitle = it })
-                } else {
-                    ChangeWarning(field, new, recordCount)
                 }
+                ChangeWarning(field, new, recordCount)
             }
         },
         confirmButton = {
@@ -206,6 +205,7 @@ private fun ChangeWarning(old: FieldDef?, new: FieldDef, recordCount: Long) {
         ChangeEffect.ID_REPLACE -> pluralStringResource(R.plurals.id_replace_warning, count, recordCount)
         ChangeEffect.ID_REGENERATE -> pluralStringResource(R.plurals.id_regenerate_warning, count, recordCount)
         ChangeEffect.KEEP_FIRST_CHOICE -> stringResource(R.string.list_single_warning)
+        ChangeEffect.KEEP_FIRST_LINK -> stringResource(R.string.link_single_warning)
         ChangeEffect.CONVERT -> pluralStringResource(R.plurals.design_type_change_warning, count, recordCount)
         ChangeEffect.RELINK -> return // RelinkOptions explains it.
     }
