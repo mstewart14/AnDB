@@ -30,7 +30,7 @@ format and no code is derived from it.
 | List | Fixed items or lookup (another field's current values; stores the value, a snapshot). Single or multiple choice | Done |
 | Link → Photo | Gallery photo by reference, with a snapshot. See Links | Done |
 | Link → Record, Linked | A record of any database, and live display of its fields. See Links | Next |
-| Link → Contact, File | Device links with snapshots | Planned |
+| Link → Contact, File | Device links with snapshots, chosen with the system pickers; tap to open in their own app | Done |
 | Link → Calendar event | Needs custom event search UI and `READ_CALENDAR` | v1.5 |
 | Photo copied into app storage, Barcode, Location, Signature | Barcode via ZXing (no ML Kit) | v1.5 |
 | Calculated | Formulas, including aggregates over backlinks | Later |
@@ -129,8 +129,15 @@ the copies, and new choices are links again.
   is chosen, its display field defaults to the field matching the most saved
   titles.
 
-**Device links (planned).** Contacts and files the same way: snapshot, fallback
-identifiers (contact name/phone/email, iCalendar UID) to re-match after sync.
+**Contacts and files (done).** Chosen with the system contact and file
+pickers, so AnDB needs no permission for either. A contact is kept by its lookup
+uri (which finds it after a sync changes its row id) with its name as the
+snapshot; it isn't checked for being gone, as that would need permission to
+read all contacts, and the Contacts app says so itself. A file keeps lasting
+read access, like a photo, with its name as the snapshot, and is marked
+unavailable if it can't be read. Tapping either opens it in its own app.
+Later: fallback identifiers (contact phone/email, iCalendar UID) to re-match
+after a sync.
 Writing to device data only via intents ("Add to calendar", "Save as
 contact"), which need no permission; AnDB never edits contacts or events.
 

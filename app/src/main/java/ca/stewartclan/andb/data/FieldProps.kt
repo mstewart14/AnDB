@@ -89,14 +89,22 @@ data class ListProps(val items: List<String> = emptyList(), val multiple: Boolea
 @Serializable
 data class Lookup(val databaseId: String, val fieldId: Long)
 
-/** What a Link field points at. More sources (contacts, files) are planned. */
+/** What a Link field points at. The serial names are stored, so they must not change. */
 @Serializable
 enum class LinkSource {
     @SerialName("photo")
     PHOTO,
 
     @SerialName("record")
-    RECORD
+    RECORD,
+
+    /** A contact in the phone's contacts, by its lookup uri, which survives syncing. */
+    @SerialName("contact")
+    CONTACT,
+
+    /** A document from the system file picker, with lasting read access. */
+    @SerialName("file")
+    FILE
 }
 
 /**

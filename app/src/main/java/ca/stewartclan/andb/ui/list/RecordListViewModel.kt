@@ -225,7 +225,7 @@ class RecordListViewModel(
                     columns.map {
                         ListCell(
                             shownText(it.field, record),
-                            (record.values[it.field.id] as? LinkValue)?.takeIf { _ -> it.field.recordLink == null }
+                            (record.values[it.field.id] as? LinkValue)?.takeIf { _ -> it.field.isPhotoLink }
                         )
                     }
                 ),

@@ -38,6 +38,7 @@ data class LinkDraft(
     fun toProps(): LinkProps? = when (source) {
         LinkSource.PHOTO -> LinkProps(LinkSource.PHOTO, copyPhotos = copyPhotos)
         LinkSource.RECORD -> databaseId?.let { LinkProps(LinkSource.RECORD, it, displayFieldId, missingName) }
+        LinkSource.CONTACT, LinkSource.FILE -> LinkProps(source)
     }
 
     companion object {
@@ -57,7 +58,9 @@ fun LinkPropsEditor(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup
         Text(stringResource(R.string.link_source_label), style = MaterialTheme.typography.labelMedium)
         val sources = listOf(
             LinkSource.PHOTO to R.string.link_source_photo,
-            LinkSource.RECORD to R.string.link_source_record
+            LinkSource.RECORD to R.string.link_source_record,
+            LinkSource.CONTACT to R.string.link_source_contact,
+            LinkSource.FILE to R.string.link_source_file
         )
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             sources.forEachIndexed { i, (source, label) ->
@@ -68,12 +71,11 @@ fun LinkPropsEditor(draft: LinkDraft, onDraftChange: (LinkDraft) -> Unit, lookup
                 ) { Text(stringResource(label)) }
             }
         }
-        val explanation = if (draft.source ==
-            LinkSource.PHOTO
-        ) {
-            R.string.link_photo_explained
-        } else {
-            R.string.link_record_explained
+        val explanation = when (draft.source) {
+            LinkSource.PHOTO -> R.string.link_photo_explained
+            LinkSource.RECORD -> R.string.link_record_explained
+            LinkSource.CONTACT -> R.string.link_contact_explained
+            LinkSource.FILE -> R.string.link_file_explained
         }
         Text(
             stringResource(explanation),

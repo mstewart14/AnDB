@@ -83,10 +83,10 @@ private fun TypedEditor(field: FieldDef, ctx: EditorContext, modifier: Modifier)
             val choices = ctx.state.listChoices[field.id].orEmpty()
             ListDropdown(field.name, text, choices, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
         }
-        FieldType.LINK -> if (field.recordLink != null) {
-            RecordLinkEditor(field, ctx, modifier)
-        } else {
-            PhotoEditor(field, ctx, modifier)
+        FieldType.LINK -> when {
+            field.recordLink != null -> RecordLinkEditor(field, ctx, modifier)
+            field.isPhotoLink -> PhotoEditor(field, ctx, modifier)
+            else -> DeviceLinkEditor(field, ctx, modifier)
         }
         else -> TextEditor(field, text, ctx.readOnly, { ctx.onEdit(field, it) }, modifier)
     }

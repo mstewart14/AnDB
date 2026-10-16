@@ -25,6 +25,9 @@ data class FieldDef(
     /** For a Link field to records, which database and display field; null for other fields. */
     val recordLink: LinkProps? get() = (props as? LinkProps)?.takeIf { it.source == LinkSource.RECORD }
 
+    /** Whether this is a Link field to photos, whose cells show a thumbnail. */
+    val isPhotoLink: Boolean get() = (props as? LinkProps)?.source == LinkSource.PHOTO
+
     /**
      * The id of the record this Link field's [link] points at, if it points into the field's
      * database; null for a link left over from a database the field linked to before.

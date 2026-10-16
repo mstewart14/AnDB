@@ -61,4 +61,6 @@ private fun linkSummary(props: LinkProps, databaseNames: Map<String, String>): S
     LinkSource.PHOTO -> stringResource(R.string.link_source_photo)
     LinkSource.RECORD -> databaseNames[props.databaseId]?.let { stringResource(R.string.link_record_summary, it) }
         ?: stringResource(R.string.list_summary_lookup_missing)
+    LinkSource.CONTACT -> stringResource(R.string.link_source_contact)
+    LinkSource.FILE -> stringResource(R.string.link_source_file)
 }

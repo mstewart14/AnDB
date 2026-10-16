@@ -52,6 +52,8 @@ class FieldPropsTest {
     fun linkPropsRoundTrip() {
         assertEquals(LinkProps(), FieldProps.decode(FieldType.LINK, FieldProps.encode(LinkProps())))
         assertEquals(LinkProps(LinkSource.PHOTO), FieldProps.decode(FieldType.LINK, """{"source":"photo"}"""))
+        assertEquals(LinkProps(LinkSource.CONTACT), FieldProps.decode(FieldType.LINK, """{"source":"contact"}"""))
+        assertEquals("""{"source":"file"}""", FieldProps.encode(LinkProps(LinkSource.FILE)))
     }
 
     @Test

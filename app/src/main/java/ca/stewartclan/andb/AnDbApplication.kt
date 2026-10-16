@@ -6,6 +6,7 @@ import ca.stewartclan.andb.data.FilterRepository
 import ca.stewartclan.andb.data.RecordRepository
 import ca.stewartclan.andb.data.ViewRepository
 import ca.stewartclan.andb.ui.common.BrowseOrder
+import ca.stewartclan.andb.ui.common.DeviceLinks
 import ca.stewartclan.andb.ui.common.FileAccess
 import ca.stewartclan.andb.ui.common.PhotoAccess
 import ca.stewartclan.andb.ui.common.RecordTitles
@@ -31,6 +32,8 @@ class AnDbApplication : Application() {
     val browseOrder = BrowseOrder()
 
     val photos: PhotoAccess by lazy { PhotoAccess(contentResolver, records) }
+
+    val deviceLinks: DeviceLinks by lazy { DeviceLinks(contentResolver) }
 
     val recordTitles: RecordTitles by lazy { RecordTitles(repository, records) }
 
