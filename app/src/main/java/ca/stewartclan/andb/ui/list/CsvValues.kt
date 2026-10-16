@@ -36,6 +36,9 @@ val FieldDef.canImport: Boolean
 object CsvValues {
     const val CHOICE_SEPARATOR = "; "
 
+    /** What the file picker offers when choosing a CSV file to import. */
+    val FILE_TYPES = arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/csv")
+
     private val yes = setOf("yes", "y", "true", "1", "x", "✓")
     private val no = setOf("no", "n", "false", "0", "")
 

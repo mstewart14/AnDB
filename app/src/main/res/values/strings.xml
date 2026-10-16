@@ -27,6 +27,8 @@
     <string name="chooser_rename_database">Rename database</string>
     <string name="chooser_start_from">Start from</string>
     <string name="chooser_start_blank">Blank</string>
+    <string name="chooser_start_csv">CSV file\u2026</string>
+    <string name="chooser_start_csv_explained">Choose the file next. Its columns become the database\u2019s fields and its rows its records; you can check how each column comes in before importing.</string>
     <string name="chooser_start_template">Template: %1$s</string>
     <string name="chooser_start_design">Design of \u201c%1$s\u201d</string>
     <string name="chooser_start_fields">Fields: %1$s. You can change them afterwards.</string>

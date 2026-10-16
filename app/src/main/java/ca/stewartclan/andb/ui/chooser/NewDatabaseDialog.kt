@@ -31,28 +31,34 @@ sealed interface StartFrom {
 
     /** The design (fields, list views, filters) of database [databaseId], without its records. */
     data class DesignOf(val databaseId: String) : StartFrom
+
+    /** A CSV file, chosen next: blank, then the CSV import, whose columns become its fields. */
+    data object CsvFile : StartFrom
 }
 
 /** [StartFrom] as a key that survives rotation: "blank", "template:<id>" or "design:<database id>". */
 private fun StartFrom.key(): String = when (this) {
     StartFrom.Blank -> BLANK
+    StartFrom.CsvFile -> CSV
     is StartFrom.FromTemplate -> "$TEMPLATE${template.id}"
     is StartFrom.DesignOf -> "$DESIGN$databaseId"
 }
 
 private fun startFrom(key: String): StartFrom = when {
+    key == CSV -> StartFrom.CsvFile
     key.startsWith(TEMPLATE) -> Templates.find(key.removePrefix(TEMPLATE))?.let { StartFrom.FromTemplate(it) }
     key.startsWith(DESIGN) -> StartFrom.DesignOf(key.removePrefix(DESIGN))
     else -> null
 } ?: StartFrom.Blank
 
 private const val BLANK = "blank"
+private const val CSV = "csv"
 private const val TEMPLATE = "template:"
 private const val DESIGN = "design:"
 
 /**
- * Names a new database and chooses what it starts from: nothing, a built-in template, or the
- * design of one of [databases]. [onConfirm] gets both.
+ * Names a new database and chooses what it starts from: nothing, a CSV file, a built-in template,
+ * or the design of one of [databases]. [onConfirm] gets both.
  */
 @Composable
 fun NewDatabaseDialog(
@@ -66,7 +72,10 @@ fun NewDatabaseDialog(
     val problem = check(value.text)
     val confirm = { if (problem == NameProblem.OK) onConfirm(value.text, startFrom(startKey)) }
 
-    val options = listOf(BLANK to stringResource(R.string.chooser_start_blank)) +
+    val options = listOf(
+        BLANK to stringResource(R.string.chooser_start_blank),
+        CSV to stringResource(R.string.chooser_start_csv)
+    ) +
         Templates.all.map {
             StartFrom.FromTemplate(it).key() to stringResource(R.string.chooser_start_template, it.name)
         } +
@@ -114,6 +123,7 @@ fun NewDatabaseDialog(
 @Composable
 private fun startDescription(start: StartFrom): String? = when (start) {
     StartFrom.Blank -> null
+    StartFrom.CsvFile -> stringResource(R.string.chooser_start_csv_explained)
     is StartFrom.FromTemplate -> stringResource(
         R.string.chooser_start_fields,
         start.template.fields.joinToString(", ") {

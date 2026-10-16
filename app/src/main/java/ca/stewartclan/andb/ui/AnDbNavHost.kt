@@ -41,6 +41,11 @@ fun AnDbNavHost(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
                 onCreatedDatabase = {
                     navController.navigate(RecordListRoute(it))
                     navController.navigate(DesignRoute(it))
+                },
+                // One made from a CSV file gets its fields from the import; back then shows its records.
+                onCreatedFromCsv = { db, uri ->
+                    navController.navigate(RecordListRoute(db))
+                    navController.navigate(CsvImportRoute(db, uri))
                 }
             )
         }

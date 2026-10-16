@@ -18,7 +18,6 @@ import ca.stewartclan.andb.R
 class MenuActions(val onEditDesign: () -> Unit, val onExportCsv: () -> Unit, val onImportCsv: () -> Unit)
 
 /** File types offered when choosing a CSV file; some apps label CSV as plain text or Excel. */
-private val CSV_TYPES = arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/csv")
 
 /**
  * The list menu's actions, with the system file dialogs for CSV export (save as "<name>.csv") and
@@ -51,6 +50,6 @@ fun rememberMenuActions(
     return MenuActions(
         onEditDesign = onEditDesign,
         onExportCsv = { exportTo.launch("$databaseName.csv") },
-        onImportCsv = { importFrom.launch(CSV_TYPES) }
+        onImportCsv = { importFrom.launch(CsvValues.FILE_TYPES) }
     )
 }

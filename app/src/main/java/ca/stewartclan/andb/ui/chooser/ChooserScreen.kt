@@ -1,6 +1,8 @@
 package ca.stewartclan.andb.ui.chooser
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +50,7 @@ import ca.stewartclan.andb.ui.common.ErrorSnackbar
 import ca.stewartclan.andb.ui.common.NameField
 import ca.stewartclan.andb.ui.common.NameProblem
 import ca.stewartclan.andb.ui.common.rememberNameState
+import ca.stewartclan.andb.ui.list.CsvValues
 import ca.stewartclan.andb.ui.theme.AnDbTheme
 import kotlinx.serialization.Serializable
 
@@ -59,6 +62,8 @@ object ChooserRoute
 fun ChooserScreen(
     onOpenDatabase: (String) -> Unit,
     onCreatedDatabase: (String) -> Unit,
+    /** A new database was created to fill from CSV file (uri): open its CSV import. */
+    onCreatedFromCsv: (databaseId: String, uri: String) -> Unit,
     /** A database file opened or shared into AnDB, to offer adding. */
     incoming: Uri? = null,
     onIncomingHandled: () -> Unit = {},
@@ -86,17 +91,13 @@ fun ChooserScreen(
     )
 
     incoming?.let { IncomingFileDialog(it, viewModel, onDone = onIncomingHandled) }
-    if (newOpen) {
-        NewDatabaseDialog(
-            databases = databases.orEmpty(),
-            check = viewModel::checkName,
-            onConfirm = { name, start ->
-                viewModel.create(name, start, onCreated = onCreatedDatabase)
-                newOpen = false
-            },
-            onDismiss = { newOpen = false }
-        )
-    }
+    NewDatabase(
+        open = newOpen,
+        onClose = { newOpen = false },
+        viewModel = viewModel,
+        onCreated = onCreatedDatabase,
+        onCreatedFromCsv = onCreatedFromCsv
+    )
     databases?.find { it.id == renameId }?.let { db ->
         NameDialog(
             title = stringResource(R.string.chooser_rename_database),
@@ -121,6 +122,45 @@ fun ChooserScreen(
             onDismiss = { deleteId = null }
         )
     }
+}
+
+/**
+ * The New database dialog while [open]. Starting from a CSV file then asks for the file, and
+ * creates the database only once one is chosen.
+ */
+@Composable
+private fun NewDatabase(
+    open: Boolean,
+    onClose: () -> Unit,
+    viewModel: ChooserViewModel,
+    onCreated: (String) -> Unit,
+    onCreatedFromCsv: (databaseId: String, uri: String) -> Unit
+) {
+    val databases by viewModel.databases.collectAsStateWithLifecycle()
+    // The name of the database waiting for its CSV file.
+    var csvName by rememberSaveable { mutableStateOf<String?>(null) }
+    val chooseCsv = rememberLauncherForActivityResult(OpenDocument()) { uri ->
+        val name = csvName
+        if (uri != null && name != null) {
+            viewModel.create(name, StartFrom.CsvFile) { id -> onCreatedFromCsv(id, uri.toString()) }
+        }
+        csvName = null
+    }
+    if (!open) return
+    NewDatabaseDialog(
+        databases = databases.orEmpty(),
+        check = viewModel::checkName,
+        onConfirm = { name, start ->
+            if (start == StartFrom.CsvFile) {
+                csvName = name
+                chooseCsv.launch(CsvValues.FILE_TYPES)
+            } else {
+                viewModel.create(name, start, onCreated = onCreated)
+            }
+            onClose()
+        },
+        onDismiss = onClose
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -65,6 +65,8 @@ class DatabaseTransfer(private val repository: DatabaseRepository) {
 
     /** Adds imported file [temp] as a new database (see [import]) and returns its id. */
     private fun add(temp: File): String {
+        // Most often a CSV file chosen here instead of in a database's menu: say where it goes.
+        check(!isText(temp)) { TEXT_FILE }
         val taken = repository.readSummaries().map { it.name }
         val id = UUID.randomUUID().toString()
         // Whatever is wrong with the file, the message would only name the scratch file.
@@ -84,6 +86,15 @@ class DatabaseTransfer(private val repository: DatabaseRepository) {
         if (failure != null) throw IllegalStateException(NOT_ANDB, failure)
         check(temp.renameTo(repository.fileFor(id))) { "Couldn't add the database" }
         return id
+    }
+
+    /** Whether [file] is text (such as CSV) rather than a database: no SQLite header, no zero bytes. */
+    private fun isText(file: File): Boolean {
+        val start = ByteArray(TEXT_SNIFF_BYTES)
+        val read = file.inputStream().use { it.read(start) }
+        if (read <= 0) return false
+        val head = start.copyOf(read)
+        return !head.decodeToString().startsWith(SQLITE_HEADER) && head.none { it == 0.toByte() }
     }
 
     /**
@@ -155,6 +166,13 @@ class DatabaseTransfer(private val repository: DatabaseRepository) {
         const val MAX_IMPORT_BYTES = 512L * 1024 * 1024
 
         const val TOO_LARGE = "That file is too large to be an AnDB database"
+
+        const val TEXT_FILE = "That’s a text file, not an AnDB database. To add a CSV file’s rows, open a " +
+            "database (or create one starting from a CSV file) and choose Import CSV… from its menu."
+
+        /** How a SQLite file starts, and how much of a file to look at to tell text from a database. */
+        const val SQLITE_HEADER = "SQLite format 3"
+        const val TEXT_SNIFF_BYTES = 4096
 
         /** What an AnDB database's schema holds, by type: its own tables, and indexes on them. */
         val EXPECTED = mapOf(

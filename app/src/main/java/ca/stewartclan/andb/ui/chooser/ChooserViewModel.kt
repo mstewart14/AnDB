@@ -43,7 +43,8 @@ class ChooserViewModel(private val repository: DatabaseRepository, private val t
         launchReporting {
             val trimmed = name.trim()
             val id = when (start) {
-                StartFrom.Blank -> repository.create(trimmed)
+                // A CSV file's columns become fields in the CSV import that follows.
+                StartFrom.Blank, StartFrom.CsvFile -> repository.create(trimmed)
                 is StartFrom.FromTemplate -> repository.create(trimmed, start.template)
                 is StartFrom.DesignOf -> repository.duplicate(start.databaseId, trimmed, withRecords = false)
             }

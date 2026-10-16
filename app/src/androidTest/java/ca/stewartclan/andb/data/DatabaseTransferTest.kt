@@ -144,11 +144,14 @@ class DatabaseTransferTest {
     fun aFileThatIsNotADatabaseIsRefused() = runBlocking {
         repository.create("Wines")
         try {
-            transfer.import("not a database at all".toByteArray())
-            fail("Imported a text file")
-        } catch (_: IllegalStateException) {
-            // Expected.
+            transfer.import("Type,Category,Aroma\nFruit,Citrus,Lemon\n".toByteArray())
+            fail("Imported a CSV file")
+        } catch (e: IllegalStateException) {
+            // A CSV file is pointed to where CSV files go.
+            assertTrue(e.message.orEmpty().contains("Import CSV"))
         }
+        // Anything else that isn't a database is simply refused.
+        assertRefused(byteArrayOf(0, 1, 2, 3, 0, 5, 6, 7))
         assertEquals(listOf("Wines"), repository.readSummaries().map { it.name })
         assertTrue(dir.listFiles { f -> f.extension == "tmp" }!!.isEmpty())
     }
